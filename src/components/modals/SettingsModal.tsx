@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GithubSettings } from '../../types/wiki'
-import {
-    clearSettings,
-    getPublicGistId,
-    loadSettings,
-    saveSettings,
-} from '../../lib/storage'
+import { getPublicGistId } from '../../lib/storage'
 import { isCryptoAvailable } from '../../lib/crypto'
 
 interface SettingsModalProps {
+    settings: GithubSettings
     onClose: () => void
+    onUpdateSettings: (settings: GithubSettings) => Promise<void>
+    onResetSettings: () => void
+    onCreateGist: () => Promise<string>
     onSaved?: (settings: GithubSettings) => void
     onCleared?: () => void
 }
@@ -41,12 +40,20 @@ function EyeOffIcon() {
     )
 }
 
-export function SettingsModal({ onClose, onSaved, onCleared }: SettingsModalProps) {
-    const [githubToken, setGithubToken] = useState('')
-    const [gistId, setGistId] = useState('')
+export function SettingsModal({
+                                  settings,
+                                  onClose,
+                                  onUpdateSettings,
+                                  onResetSettings,
+                                  onCreateGist,
+                                  onSaved,
+                                  onCleared,
+                              }: SettingsModalProps) {
+    const [githubToken, setGithubToken] = useState(settings.githubToken)
+    const [gistId, setGistId] = useState(settings.gistId)
     const [showToken, setShowToken] = useState(false)
-    const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [creating, setCreating] = useState(false)
     const [saved, setSaved] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -58,37 +65,13 @@ export function SettingsModal({ onClose, onSaved, onCleared }: SettingsModalProp
     const cryptoAvailable = isCryptoAvailable()
 
     useEffect(() => {
-        let cancelled = false
-
-        loadSettings()
-            .then((settings) => {
-                if (cancelled) {
-                    return
-                }
-                setGithubToken(settings.githubToken)
-                setGistId(settings.gistId)
-            })
-            .catch(() => {
-                if (!cancelled) {
-                    setError('Impossibile caricare le impostazioni salvate.')
-                }
-            })
-            .finally(() => {
-                if (!cancelled) {
-                    setLoading(false)
-                }
-            })
-
-        return () => {
-            cancelled = true
-        }
-    }, [])
+        setGithubToken(settings.githubToken)
+        setGistId(settings.gistId)
+    }, [settings])
 
     useEffect(() => {
-        if (!loading) {
-            firstFieldRef.current?.focus()
-        }
-    }, [loading])
+        firstFieldRef.current?.focus()
+    }, [])
 
     useEffect(() => {
         function handleKeyDown(event: KeyboardEvent) {
@@ -120,7 +103,7 @@ export function SettingsModal({ onClose, onSaved, onCleared }: SettingsModalProp
         }
 
         try {
-            await saveSettings(nextSettings)
+            await onUpdateSettings(nextSettings)
             setSaved(true)
             onSaved?.(nextSettings)
 
@@ -137,12 +120,34 @@ export function SettingsModal({ onClose, onSaved, onCleared }: SettingsModalProp
         }
     }
 
+    async function handleCreateGist() {
+        const token = githubToken.trim()
+
+        if (!token) {
+            setError('Inserisci prima il GitHub Token.')
+            return
+        }
+
+        setError(null)
+        setCreating(true)
+
+        try {
+            await onUpdateSettings({ githubToken: token, gistId: gistId.trim() })
+            const newId = await onCreateGist()
+            setGistId(newId)
+        } catch {
+            setError('Creazione del Gist non riuscita. Verifica il token.')
+        } finally {
+            setCreating(false)
+        }
+    }
+
     function handleClear() {
         if (!window.confirm('Rimuovere il token e il Gist ID salvati?')) {
             return
         }
 
-        clearSettings()
+        onResetSettings()
         setGithubToken('')
         setGistId('')
         setSaved(false)
@@ -187,110 +192,107 @@ export function SettingsModal({ onClose, onSaved, onCleared }: SettingsModalProp
                     </button>
                 </header>
 
-                {loading ? (
-                    <div className="settings-loading">Caricamento impostazioni…</div>
-                ) : (
-                    <form className="settings-form" onSubmit={handleSave}>
-                        <label className="settings-field">
-                            <span className="settings-label">GitHub Token</span>
-                            <div className="settings-input-group">
-                                <input
-                                    ref={firstFieldRef}
-                                    type={showToken ? 'text' : 'password'}
-                                    value={githubToken}
-                                    autoComplete="off"
-                                    spellCheck={false}
-                                    placeholder="ghp_…"
-                                    onChange={(event) =>
-                                        setGithubToken(event.target.value)
-                                    }
-                                />
-                                <button
-                                    className="settings-reveal"
-                                    type="button"
-                                    aria-label={
-                                        showToken
-                                            ? 'Nascondi token'
-                                            : 'Mostra token'
-                                    }
-                                    onClick={() =>
-                                        setShowToken((value) => !value)
-                                    }
-                                >
-                                    {showToken ? <EyeOffIcon /> : <EyeIcon />}
-                                </button>
-                            </div>
-                            <span className="settings-hint">
-                                Serve un token con scope{' '}
-                                <code>gist</code> per salvare le modifiche.
-                            </span>
-                        </label>
-
-                        <label className="settings-field">
-                            <span className="settings-label">Gist ID</span>
+                <form className="settings-form" onSubmit={handleSave}>
+                    <label className="settings-field">
+                        <span className="settings-label">GitHub Token</span>
+                        <div className="settings-input-group">
                             <input
-                                type="text"
-                                value={gistId}
+                                ref={firstFieldRef}
+                                type={showToken ? 'text' : 'password'}
+                                value={githubToken}
                                 autoComplete="off"
                                 spellCheck={false}
-                                placeholder={
-                                    publicGistId
-                                        ? `${publicGistId} (pubblico)`
-                                        : 'ID del Gist…'
-                                }
+                                placeholder="ghp_…"
                                 onChange={(event) =>
-                                    setGistId(event.target.value)
+                                    setGithubToken(event.target.value)
                                 }
                             />
-                            <span className="settings-hint">
-                                {publicGistId
-                                    ? 'Lascia vuoto per usare il Gist pubblico predefinito.'
-                                    : 'ID del Gist usato come storage remoto.'}
-                            </span>
-                        </label>
-
-                        {!cryptoAvailable && (
-                            <p className="settings-warning">
-                                Web Crypto non disponibile: i dati verranno
-                                salvati senza cifratura forte.
-                            </p>
-                        )}
-
-                        {error && <p className="settings-error">{error}</p>}
-
-                        <footer className="settings-actions">
                             <button
-                                className="side-btn settings-clear"
+                                className="settings-reveal"
                                 type="button"
-                                onClick={handleClear}
+                                aria-label={
+                                    showToken
+                                        ? 'Nascondi token'
+                                        : 'Mostra token'
+                                }
+                                onClick={() =>
+                                    setShowToken((value) => !value)
+                                }
                             >
-                                Rimuovi
+                                {showToken ? <EyeOffIcon /> : <EyeIcon />}
+                            </button>
+                        </div>
+                        <span className="settings-hint">
+                            Serve un token con scope{' '}
+                            <code>gist</code> per salvare le modifiche.
+                        </span>
+                    </label>
+
+                    <label className="settings-field">
+                        <span className="settings-label">Gist ID</span>
+                        <input
+                            type="text"
+                            value={gistId}
+                            autoComplete="off"
+                            spellCheck={false}
+                            placeholder={
+                                publicGistId
+                                    ? `${publicGistId} (pubblico)`
+                                    : 'ID del Gist…'
+                            }
+                            onChange={(event) =>
+                                setGistId(event.target.value)
+                            }
+                        />
+                        <span className="settings-hint">
+                            {publicGistId
+                                ? 'Lascia vuoto per usare il Gist pubblico predefinito.'
+                                : 'ID del Gist usato come storage remoto.'}
+                        </span>
+                    </label>
+
+                    {!cryptoAvailable && (
+                        <p className="settings-warning">
+                            Web Crypto non disponibile: i dati verranno
+                            salvati senza cifratura forte.
+                        </p>
+                    )}
+
+                    {error && <p className="settings-error">{error}</p>}
+
+                    <footer className="settings-actions">
+                        <button
+                            className="side-btn settings-clear"
+                            type="button"
+                            onClick={handleClear}
+                        >
+                            Rimuovi
+                        </button>
+
+                        <div className="settings-actions-right">
+                            <button
+                                className="side-btn"
+                                type="button"
+                                disabled={creating}
+                                onClick={handleCreateGist}
+                            >
+                                {creating ? 'Creazione…' : 'Crea nuovo Gist'}
                             </button>
 
-                            <div className="settings-actions-right">
-                                <button
-                                    className="side-btn"
-                                    type="button"
-                                    onClick={onClose}
-                                >
-                                    Annulla
-                                </button>
-
-                                <button
-                                    className="side-btn settings-save"
-                                    type="submit"
-                                    disabled={saving}
-                                >
-                                    {saving
-                                        ? 'Salvataggio…'
-                                        : saved
-                                            ? 'Salvato ✓'
-                                            : 'Salva'}
-                                </button>
-                            </div>
-                        </footer>
-                    </form>
-                )}
+                            <button
+                                className="side-btn settings-save"
+                                type="submit"
+                                disabled={saving}
+                            >
+                                {saving
+                                    ? 'Salvataggio…'
+                                    : saved
+                                        ? 'Salvato ✓'
+                                        : 'Salva'}
+                            </button>
+                        </div>
+                    </footer>
+                </form>
             </div>
         </div>
     )

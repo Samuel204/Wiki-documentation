@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { DocumentPanel } from './components/DocumentPanel'
 import { PlaygroundPanel } from './components/PlaygroundPanel.tsx'
@@ -7,11 +7,10 @@ import { TopBar } from './components/TopBar'
 import { SettingsModal } from './components/modals/SettingsModal'
 import { exportAllFiles, exportFile } from './lib/export'
 import { useWikiState } from './hooks/useWikiState'
-import type { AppMode, SyncStatus } from './types/wiki'
+import { useGithubSync } from './hooks/useGithubSync'
+import type { AppMode } from './types/wiki'
 
 export default function App() {
-    const [mode, setMode] = useState<AppMode>('viewer')
-    const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
     const [search, setSearch] = useState('')
     const [settingsOpen, setSettingsOpen] = useState(false)
@@ -33,7 +32,36 @@ export default function App() {
         deleteCategory,
         deleteFile,
         updatePlayground,
+        applyRemoteData,
     } = useWikiState()
+
+    const {
+        settings,
+        mode,
+        status: syncStatus,
+        ready,
+        setMode,
+        pull,
+        schedulePush,
+        updateSettings,
+        resetSettings,
+        createGist,
+    } = useGithubSync({
+        state,
+        onRemoteData: applyRemoteData,
+    })
+
+    // Pull iniziale non appena le impostazioni cifrate sono pronte.
+    useEffect(() => {
+        if (ready) {
+            void pull()
+        }
+    }, [ready, pull])
+
+    // Ad ogni modifica dello stato (in admin) pianifica un push con debounce.
+    useEffect(() => {
+        schedulePush()
+    }, [state, schedulePush])
 
     const visibleFiles = useMemo(() => {
         const query = search.trim().toLowerCase()
@@ -49,7 +77,8 @@ export default function App() {
 
     function handleModeChange(nextMode: AppMode) {
         if (nextMode === 'admin' && mode === 'viewer') {
-            setMode('admin')
+            // L'ingresso in Admin richiede un token: apri le impostazioni.
+            setSettingsOpen(true)
             return
         }
 
@@ -57,9 +86,8 @@ export default function App() {
             if (!window.confirm('Uscire dalla modalità Admin?')) {
                 return
             }
+            setMode('viewer')
         }
-
-        setMode(nextMode)
     }
 
     function handleCreateCategory() {
@@ -170,9 +198,15 @@ export default function App() {
 
             {settingsOpen && (
                 <SettingsModal
+                    settings={settings}
                     onClose={() => setSettingsOpen(false)}
-                    onSaved={() => setSyncStatus('synced')}
-                    onCleared={() => setSyncStatus('idle')}
+                    onUpdateSettings={updateSettings}
+                    onResetSettings={resetSettings}
+                    onCreateGist={createGist}
+                    onSaved={() => {
+                        void pull()
+                    }}
+                    onCleared={() => setMode('viewer')}
                 />
             )}
 

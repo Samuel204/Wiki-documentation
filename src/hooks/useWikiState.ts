@@ -201,6 +201,16 @@ export function useWikiState() {
         }))
     }, [])
 
+    const applyRemoteData = useCallback(
+        (remote: { wiki?: AppState['wiki']; playground?: AppState['playground'] }) => {
+            setState((current) => ({
+                wiki: remote.wiki ?? current.wiki,
+                playground: remote.playground ?? current.playground,
+            }))
+        },
+        [],
+    )
+
     return {
         state,
         files,
@@ -214,5 +224,6 @@ export function useWikiState() {
         deleteCategory,
         deleteFile,
         updatePlayground,
+        applyRemoteData,
     }
 }
