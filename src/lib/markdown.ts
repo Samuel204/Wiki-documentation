@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
+import 'highlight.js/styles/github.css'
 
 const RUNNABLE_LANGS = ['jsx', 'js', 'javascript', 'react']
 

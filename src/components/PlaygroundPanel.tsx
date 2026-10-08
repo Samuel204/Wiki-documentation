@@ -1,10 +1,16 @@
-import { useEffect, useState } from 'react'
+import {useEffect, useRef, useState} from 'react'
 import {DEFAULT_PLAYGROUND_CODE} from "../hooks/useWikiState.ts";
 
 interface PlaygroundPanelProps {
     code: string
     savedLabel?: string
     onChange: (code: string) => void
+}
+
+interface ConsoleEntry {
+    id: number
+    type: 'log' | 'error'
+    message: string
 }
 
 function RunIcon() {
@@ -32,7 +38,6 @@ function ConsoleIcon() {
         </svg>
     )
 }
-
 
 function buildPreviewDocument(code: string): string {
     return `<!doctype html>
@@ -65,12 +70,32 @@ function buildPreviewDocument(code: string): string {
     <pre id="error"></pre>
 
     <script>
+      (function () {
+        function serialize(args) {
+          return Array.prototype.map.call(args, function (value) {
+            if (typeof value === 'string') return value;
+            try { return JSON.stringify(value); } catch (e) { return String(value); }
+          }).join(' ');
+        }
+        ['log', 'info', 'warn', 'error'].forEach(function (level) {
+          var original = console[level];
+          console[level] = function () {
+            parent.postMessage({
+              __pg: true,
+              type: (level === 'error' || level === 'warn') ? 'error' : 'log',
+              message: serialize(arguments),
+            }, '*');
+            if (original) original.apply(console, arguments);
+          };
+        });
+      })();
+
       window.onerror = function(message, source, line, column, error) {
-        const element = document.getElementById('error');
-        element.textContent =
-          error && error.stack
-            ? error.stack
-            : String(message) + ' (' + line + ':' + column + ')';
+        const detail = error && error.stack
+          ? error.stack
+          : String(message) + ' (' + line + ':' + column + ')';
+        document.getElementById('error').textContent = detail;
+        parent.postMessage({ __pg: true, type: 'error', message: detail }, '*');
       };
     </script>
 
@@ -83,8 +108,9 @@ function buildPreviewDocument(code: string): string {
 
         new Function(compiled)();
       } catch (error) {
-        document.getElementById('error').textContent =
-          error && error.stack ? error.stack : String(error);
+        const detail = error && error.stack ? error.stack : String(error);
+        document.getElementById('error').textContent = detail;
+        parent.postMessage({ __pg: true, type: 'error', message: detail }, '*');
       }
     </script>
   </body>
@@ -98,18 +124,54 @@ export function PlaygroundPanel({
                                 }: PlaygroundPanelProps) {
     const [preview, setPreview] = useState('')
     const [consoleVisible, setConsoleVisible] = useState(false)
+    const [logs, setLogs] = useState<ConsoleEntry[]>([])
+    const iframeRef = useRef<HTMLIFrameElement>(null)
+    const logIdRef = useRef(0)
 
     useEffect(() => {
         setPreview(buildPreviewDocument(code))
     }, [code])
 
+    useEffect(() => {
+        function handleMessage(event: MessageEvent) {
+            const iframe = iframeRef.current
+            if (!iframe || event.source !== iframe.contentWindow) {
+                return
+            }
+
+            const data = event.data as
+                | { __pg?: boolean; type?: string; message?: string }
+                | undefined
+
+            if (!data || !data.__pg) {
+                return
+            }
+
+            logIdRef.current += 1
+            setLogs((current) => [
+                ...current,
+                {
+                    id: logIdRef.current,
+                    type: data.type === 'error' ? 'error' : 'log',
+                    message: data.message ?? '',
+                },
+            ])
+            setConsoleVisible(true)
+        }
+
+        window.addEventListener('message', handleMessage)
+        return () => window.removeEventListener('message', handleMessage)
+    }, [])
+
     function runCode() {
+        setLogs([])
         setPreview(buildPreviewDocument(code))
     }
 
     function resetCode() {
         if (window.confirm('Ripristinare il codice del playground?')) {
             onChange(DEFAULT_PLAYGROUND_CODE)
+            setLogs([])
             setPreview(buildPreviewDocument(DEFAULT_PLAYGROUND_CODE))
         }
     }
@@ -155,6 +217,7 @@ export function PlaygroundPanel({
                 <div className="playground-preview-wrap">
                     <span className="panel-label">PREVIEW</span>
                     <iframe
+                        ref={iframeRef}
                         className="playground-preview"
                         title="Anteprima playground"
                         sandbox="allow-scripts"
@@ -165,7 +228,21 @@ export function PlaygroundPanel({
 
             {consoleVisible && (
                 <div className="playground-console">
-                    La console del playground viene visualizzata nell'anteprima.
+                    {logs.length === 0 ? (
+                        <div className="log-line log-empty">
+                            Nessun output. Premi “Run” per eseguire il codice.
+                        </div>
+                    ) : (
+                        logs.map((entry) => (
+                            <div
+                                key={entry.id}
+                                className={`log-line ${entry.type === 'error' ? 'error' : ''}`}
+                            >
+                                {entry.type === 'error' ? '✖ ' : ''}
+                                {entry.message}
+                            </div>
+                        ))
+                    )}
                 </div>
             )}
         </section>

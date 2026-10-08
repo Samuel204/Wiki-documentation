@@ -1,5 +1,3 @@
-// src/lib/storage.ts
-
 import type { AppState, GithubSettings } from '../types/wiki'
 import { decryptString, encryptString } from './crypto'
 
