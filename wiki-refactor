@@ -1,0 +1,2545 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self';
+                   script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com;
+                   style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com;
+                   font-src https://fonts.gstatic.com;
+                   img-src * data:;
+                   connect-src https://api.github.com https://cdnjs.cloudflare.com;">
+  <meta name="gist-public-id" content="7dff227af99c30472f2b1cdbf4839904">
+
+  <title>Learning Wiki</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+
+  <style>
+  :root{
+    --bg:#ffffff;
+    --bg-elevated:#f8f9fb;
+    --bg-panel:#fbfbfc;
+    --bg-sunken:#f3f4f6;
+    --border:#e3e6ea;
+    --border-soft:#edeff2;
+    --text:#1c2126;
+    --text-dim:#68707b;
+    --text-faint:#9aa1ab;
+    --wiki-accent: rgb(15 157 142);
+    --wiki-accent-dim:rgba(15,157,142,.10);
+    --play-accent:#7c4fe0;
+    --play-accent-dim:rgba(124,79,224,.10);
+    --accent:#0f9d8e;
+    --accent-dim:rgba(15,157,142,.10);
+    --danger:#dc2626;
+    --danger-dim:rgba(220,38,38,.08);
+    --ok:#16a34a;
+    --warn:#d97706;
+    --radius:10px;
+    --radius-lg:16px;
+    --page-bg:#eef0f3;
+    --card-shadow:0 1px 2px rgba(16,24,40,.04), 0 4px 14px rgba(16,24,40,.05);
+    --font-display:'Space Grotesk',sans-serif;
+    --font-body:'Inter',sans-serif;
+    --font-mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--page-bg);
+    color:var(--text);
+    font-family:var(--font-body);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  button{font-family:var(--font-body);cursor:pointer;}
+  input,select,textarea{font-family:var(--font-body);}
+
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:#d6d9de;border-radius:6px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  /* ---------- TOPBAR ---------- */
+  #topbar{
+    display:flex;align-items:center;gap:14px;
+    padding:10px 18px;
+    margin:12px 12px 0 12px;
+    background:var(--bg-elevated);
+    border:1px solid var(--border);
+    border-radius:var(--radius-lg);
+    box-shadow:var(--card-shadow);
+    flex-shrink:0;
+    z-index:20;
+  }
+  #brand{
+    display:flex;align-items:center;gap:9px;
+    font-family:var(--font-display);font-weight:600;font-size:15px;
+    letter-spacing:.2px;
+    white-space:nowrap;
+    color:var(--text);
+  }
+  #brand .dot{
+    width:9px;height:9px;border-radius:50%;
+    background:linear-gradient(135deg, var(--wiki-accent), var(--play-accent));
+    flex-shrink:0;
+  }
+  #hamburger{
+    background:none;border:1px solid var(--border);color:var(--text);
+    border-radius:8px;width:34px;height:34px;
+    align-items:center;justify-content:center;
+    font-size:16px;display:flex;
+  }
+  #mobile-bottom-nav{display:none;}
+  #topbar-spacer{flex:1;}
+  #sync-status{
+    display:flex;align-items:center;gap:7px;
+    font-size:12px;color:var(--text-dim);
+    padding:6px 10px;border:1px solid var(--border);border-radius:8px;
+    white-space:nowrap;cursor:pointer;
+  }
+  #sync-status:hover{border-color: rgb(155 157 156 / 0.49);color:var(--text);}
+  #sync-status:focus-visible{outline:2px solid var(--wiki-accent);outline-offset:2px;}
+  #sync-status .pulse{width:7px;height:7px;border-radius:50%;background:var(--text-faint);}
+  #sync-status.status-synced .pulse{background:var(--ok);}
+  #sync-status.status-syncing .pulse{background:var(--warn);animation:pulse 1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+  /* ---- VIEWER / ADMIN MODE SWITCH ---- */
+  #mode-switch{
+    position:relative;display:inline-flex;align-items:center;
+    background:var(--bg-sunken);
+    border:1px solid var(--border);
+    border-radius:999px;
+    padding:3px;gap:0;flex-shrink:0;
+    user-select:none;
+  }
+  #mode-switch .knob{
+    position:absolute;top:3px;bottom:3px;left:3px;
+    width:calc(50% - 3px);
+    border-radius:999px;
+    background:var(--bg);
+    box-shadow:0 1px 3px rgba(16,24,40,.12);
+    transition:transform .18s ease, background .18s ease, box-shadow .18s ease;
+    pointer-events:none;
+  }
+  #mode-switch.admin .knob{
+    transform:translateX(100%);
+    background:rgba(22,163,74,.14);
+    box-shadow:inset 0 0 0 1px rgba(22,163,74,.3);
+  }
+  #mode-switch .mode-opt{
+    position:relative;z-index:1;
+    background:none;border:none;
+    min-width:62px;text-align:center;
+    font-size:11.5px;font-weight:700;letter-spacing:.3px;
+    padding:4px 10px;border-radius:999px;
+    color:var(--text-faint);
+    transition:color .15s;white-space:nowrap;
+  }
+  #mode-switch .mode-opt:hover:not(.active){color:var(--text);}
+  #mode-switch .mode-opt.active{color:var(--text-dim);}
+  #mode-switch.admin .mode-opt.active{color:var(--ok);}
+  #mode-switch .mode-opt:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  /* in viewer mode nascondi i controlli di editing */
+  body.viewer-mode #btn-new-category,
+  body.viewer-mode #footer-actions-row,
+  body.viewer-mode .footer-divider,
+  body.viewer-mode #btn-toggle-edit,
+  body.viewer-mode #btn-delete-file,
+  body.viewer-mode #file-cat-select,
+  body.viewer-mode .del-cat,
+  body.viewer-mode #btn-empty-upload{ display:none !important; }
+
+  body.viewer-mode #file-title-input{
+    pointer-events:none;
+    opacity:.85;
+  }
+  body.viewer-mode #wiki-empty p .upload-hint{ display:none; }
+
+  /* ---------- LAYOUT: 3 COLONNE (a card, spaziate) ---------- */
+  #app{flex:1;display:flex;min-height:0;position:relative;padding:12px 12px 12px 12px;gap:0;}
+
+  /* ---- SIDEBAR ---- */
+  #wiki-sidebar{
+    --accent:var(--wiki-accent); --accent-dim:var(--wiki-accent-dim);
+    width:252px;flex-shrink:0;
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius-lg);
+    box-shadow:var(--card-shadow);
+    display:flex;flex-direction:column;
+    min-height:0;overflow:hidden;
+    margin-right:12px;
+    transition:width .18s ease, margin .18s ease, opacity .15s ease;
+  }
+  #wiki-sidebar.collapsed{width:0;min-width:0;margin-right:0;border:none;box-shadow:none;overflow:hidden;opacity:0;}
+  #sidebar-head{
+    display:flex;align-items:center;gap:8px;
+    padding:13px 14px 8px;flex-shrink:0;
+  }
+  #sidebar-head .label{
+    font-family:var(--font-display);font-weight:600;font-size:13px;color:var(--text);
+    display:flex;align-items:center;gap:7px;flex:1;
+  }
+  #sidebar-head .label svg{color:var(--accent);flex-shrink:0;}
+  #btn-collapse-sidebar{
+    background:none;border:1px solid var(--border);color:var(--text-faint);
+    width:26px;height:26px;border-radius:7px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  #btn-collapse-sidebar:hover{color:var(--text);border-color:var(--text-faint);}
+  #wiki-search{padding:0 14px 10px;}
+  #wiki-search input{
+    width:100%;background:var(--bg);border:1px solid var(--border);
+    color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px;outline:none;
+  }
+  #wiki-search input:focus{border-color:var(--accent);}
+  #category-list{flex:1;overflow-y:auto;padding:4px 10px;}
+  .category-block{margin-bottom:2px;}
+  .category-head{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    padding:8px 8px;
+    border-radius:9px;cursor:pointer;
+    font-size:10px;font-weight:700;color:var(--text-dim);
+    text-transform:uppercase;letter-spacing:.5px;
+  }
+  .category-head svg{flex-shrink:0;color:var(--text-faint);}
+  .category-head:hover{background:var(--bg-sunken);}
+  .category-head .chev{font-size:10px;transition:transform .15s;width:10px;display:inline-block;color:var(--text-faint);}
+  .category-head.collapsed .chev{transform:rotate(-90deg);}
+  .category-head .count{
+    margin-left:auto;font-weight:600;font-size:10.5px;color:var(--text-faint);
+    font-family:var(--font-mono);background:var(--bg-sunken);
+    padding:1px 6px;border-radius:20px;
+  }
+  .category-head .del-cat{opacity:0;color:var(--text-faint);padding:2px 4px;border-radius:4px;display:flex;}
+  .category-head:hover .del-cat{opacity:1;}
+  .category-head .del-cat:hover{color:var(--danger);}
+
+  .file-list{padding-left:8px;}
+  .file-item{
+    display:flex;align-items:center;gap:8px;
+    padding:7px 10px;border-radius:9px;cursor:pointer;
+    font-size:13px;color:var(--text-dim);
+    margin:1px 0;
+  }
+  .recent-block{
+    margin:0 0 8px;
+    padding-bottom:8px;
+    border-bottom:1px solid var(--border-soft);
+  }
+  .recent-block .category-head{cursor:default;}
+  .recent-block .category-head:hover{background:transparent;}
+  .recent-files{padding-left:8px;}
+  .recent-files .file-category{
+    overflow:hidden;
+    color:var(--text-faint);
+    font-size:10px;
+    font-weight:600;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .file-item svg{flex-shrink:0;color:var(--text-faint);}
+  .file-item:hover{background:var(--bg-sunken);color:var(--text);}
+  .file-item.active{background:var(--accent-dim);color:var(--accent);font-weight:600;}
+  .file-item.active svg{color:var(--accent);}
+  .file-item .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;}
+  #wiki-sidebar-footer{padding:10px 10px 12px;border-top:1px solid var(--border-soft);display:flex;flex-direction:column;gap:6px;flex-shrink:0;}
+  #wiki-sidebar-footer .footer-divider{height:1px;background:var(--border-soft);margin:2px 2px;}
+  .side-btn{
+    background:var(--bg);border:1px solid var(--border);color:var(--text);
+    border-radius:9px;padding:8px 10px;font-size:12.5px;font-weight:500;
+    display:flex;align-items:center;gap:7px;justify-content:center;
+  }
+  .side-btn svg{flex-shrink:0;}
+  .side-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .side-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .side-btn:disabled:hover{border-color:var(--border);color:var(--text);}
+  .side-btn.subtle{background:transparent;border-color:transparent;color:var(--text-dim);}
+  .side-btn.subtle:hover{background:var(--bg-sunken);border-color:transparent;color:var(--text);}
+  #footer-actions-row{display:flex;gap:6px;}
+  #footer-actions-row .side-btn{flex:1;padding:8px 4px;flex-direction:column;gap:3px;}
+  #footer-actions-row .side-btn .btn-label{
+    font-size:9.5px;font-weight:600;letter-spacing:.2px;
+    color:inherit;line-height:1;
+  }
+
+
+  /* ---- DOC PANEL (centro) ---- */
+  #doc-panel{
+    --accent:var(--wiki-accent); --accent-dim:var(--wiki-accent-dim);
+    flex:1 1 40%;min-width:340px;
+    display:flex;flex-direction:column;min-height:0;
+    background:var(--bg);
+    border:1px solid var(--border);
+    border-radius:var(--radius-lg);
+    box-shadow:var(--card-shadow);
+    overflow:hidden;
+  }
+  #wiki-empty{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:var(--text-faint);gap:10px;text-align:center;padding:20px;
+  }
+  #wiki-empty h2{font-family:var(--font-display);color:var(--text-dim);font-weight:600;font-size:18px;margin:0;}
+  #wiki-empty p{font-size:13px;max-width:340px;margin:0;line-height:1.5;}
+
+  #file-panel{flex:1;display:none;flex-direction:column;min-height:0;}
+  #file-panel.active{display:flex;}
+  #file-header{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:14px 20px;border-bottom:1px solid var(--border-soft);
+    background:var(--bg-elevated);
+  }
+  #file-title-input{
+    background:transparent;border:none;color:var(--text);
+    font-family:var(--font-display);font-size:16px;font-weight:600;
+    outline:none;flex:1;min-width:120px;padding:4px 2px;border-radius:5px;
+  }
+  #file-title-input:focus{background:var(--bg);}
+  .category-picker{
+    position:relative;flex-shrink:0;
+  }
+  .category-picker-toggle{
+    /*min-width:148px;*/
+    height:30px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:0 10px 0 11px;
+    background:var(--bg);border:1px solid var(--border);
+    border-radius:9px;color:var(--text-dim);
+    font-size:12.5px;font-weight:600;
+    transition:border-color .15s ease, box-shadow .15s ease, color .15s ease, background .15s ease;
+  }
+  .category-picker-toggle:hover{
+    color:var(--text);border-color:#c8cdd4;background:#fff;
+  }
+  .category-picker.open .category-picker-toggle{
+    color:var(--wiki-accent);border-color:var(--wiki-accent);
+    box-shadow:0 0 0 3px var(--wiki-accent-dim);
+  }
+  .category-picker-toggle .category-icon{color:var(--wiki-accent);flex-shrink:0;}
+  .category-picker-toggle .category-label{
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:left;
+  }
+  .category-picker-toggle .chev-down{
+    color:var(--text-faint);flex-shrink:0;transition:transform .18s ease;
+  }
+  .category-picker.open .category-picker-toggle .chev-down{transform:rotate(180deg);}
+  .category-dropdown{
+    position:absolute;top:calc(100% + 7px);right:0;z-index:55;
+    min-width:220px;max-width:280px;
+    display:none;flex-direction:column;gap:2px;
+    padding:6px;background:var(--bg);
+    border:1px solid var(--border);border-radius:12px;
+    box-shadow:0 14px 32px rgba(16,24,40,.14);
+  }
+  .category-picker.open .category-dropdown{display:flex;}
+  .category-option{
+    width:100%;display:flex;align-items:center;gap:9px;
+    padding:9px 10px;background:transparent;border:none;border-radius:8px;
+    color:var(--text-dim);font-size:13px;font-weight:500;text-align:left;
+  }
+  .category-option:hover{background:var(--bg-sunken);color:var(--text);}
+  .category-option.selected{
+    background:var(--wiki-accent-dim);color:var(--wiki-accent);font-weight:600;
+  }
+  .category-option .option-name{
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;
+  }
+  .category-option .check{color:var(--wiki-accent);flex-shrink:0;}
+  .icon-btn{
+    background:var(--bg);border:1px solid var(--border);color:var(--text-dim);
+    border-radius:7px;padding:6px 11px;font-size:12px;font-weight:500;
+    display:flex;align-items:center;gap:5px;
+  }
+  .icon-btn:hover{color:var(--text);border-color:var(--text-faint);}
+  .icon-btn.danger:hover{color:var(--danger);border-color:var(--danger);background:var(--danger-dim);}
+  .icon-btn.accent{color:#fff;background:var(--accent);border-color:var(--accent);}
+  .icon-btn.accent:hover{opacity:.9;color:#fff;}
+
+  /* ---- MENU AZIONI (dropdown nel file-header) ---- */
+  #file-actions-menu{position:relative;display:inline-flex;}
+  /* nascondi il menu Azioni in viewer mode (solo admin) */
+  body.viewer-mode #file-actions-menu{ display:none !important; }
+  #btn-actions-toggle{
+    display:flex;align-items:center;gap:6px;
+  }
+  #btn-actions-toggle .chev-down{
+    transition:transform .15s;
+  }
+  #file-actions-menu.open #btn-actions-toggle .chev-down{
+    transform:rotate(180deg);
+  }
+  #actions-dropdown{
+    position:absolute;top:calc(100% + 6px);right:0;z-index:50;
+    min-width:170px;
+    background:var(--bg);
+    border:1px solid var(--border);
+    border-radius:10px;
+    box-shadow:0 10px 30px rgba(16,24,40,.14);
+    padding:6px;
+    display:none;flex-direction:column;gap:2px;
+  }
+  #file-actions-menu.open #actions-dropdown{display:flex;}
+  .actions-item{
+    display:flex;align-items:center;gap:10px;
+    background:none;border:none;text-align:left;
+    padding:8px 10px;border-radius:7px;
+    font-size:13px;font-weight:500;color:var(--text);
+    width:100%;
+  }
+  .actions-item svg{flex-shrink:0;color:var(--text-dim);}
+  .actions-item:hover{background:var(--bg-sunken);}
+  .actions-item.danger{color:var(--danger);}
+  .actions-item.danger svg{color:var(--danger);}
+  .actions-item.danger:hover{background:var(--danger-dim);}
+
+  #file-body{flex:1;overflow-y:auto;min-height:0;}
+  #md-viewer{padding:24px 30px;max-width:760px;margin:0 auto;line-height:1.7;font-size:15px;}
+  #md-editor{
+    width:100%;height:100%;border:none;outline:none;resize:none;
+    background:var(--bg);color:var(--text);
+    font-family:var(--font-mono);font-size:13.5px;line-height:1.6;
+    padding:20px 26px;display:none;
+  }
+  #md-editor.active{display:block;}
+  #md-viewer.hidden{display:none;}
+
+  #md-viewer h1,#md-viewer h2,#md-viewer h3{font-family:var(--font-display);color:var(--text);}
+  #md-viewer h1{font-size:24px;border-bottom:1px solid var(--border);padding-bottom:8px;margin-top:0;}
+  #md-viewer h2{font-size:19px;margin-top:30px;border-bottom:1px solid var(--border-soft);padding-bottom:6px;}
+  #md-viewer h3{font-size:15.5px;margin-top:24px;}
+  #md-viewer p{color:#333a42;}
+  #md-viewer a{color:var(--accent);}
+  #md-viewer code{
+    background:var(--bg-sunken);border:1px solid var(--border-soft);
+    padding:2px 5px;border-radius:5px;font-family:var(--font-mono);font-size:.85em;
+  }
+  #md-viewer pre{
+    background:#fff;
+    padding:14px 16px;
+    overflow-x:auto;
+  }
+  #md-viewer pre code{background:none;border:none;padding:0;}
+  #md-viewer blockquote{
+    border-left:3px solid var(--accent);margin:0;padding:2px 16px;color:var(--text-dim);
+    background:var(--accent-dim);border-radius:0 6px 6px 0;
+  }
+  #md-viewer ul,#md-viewer ol{color:#333a42;padding-left:22px;}
+  #md-viewer table{border-collapse:collapse;width:100%;margin:14px 0;}
+  #md-viewer th,#md-viewer td{border:1px solid var(--border);padding:6px 10px;font-size:13.5px;}
+  #md-viewer th{background:var(--bg-sunken);}
+  #md-viewer img{max-width:100%;border-radius:8px;}
+  #md-viewer hr{border:none;border-top:1px solid var(--border);margin:24px 0;}
+
+  /* ---- "Prova questo esempio" nei code block ---- */
+  .code-example-wrap{
+    margin:20px 0;
+    overflow:hidden;
+    border:0.5px solid #d9dce5;
+    border-radius:12px;
+    background: rgba(241, 242, 247, 0.73);
+  }
+  .code-example-wrap pre{
+    margin:0;
+    padding:16px 0;
+    overflow-x:auto;
+    border:none;
+    border-radius:0;
+    background:#eef0f4;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.72);
+  }
+  .code-example-wrap pre code{
+    display:block;
+    min-width:max-content;
+    padding:0;
+    border:none;
+    background:transparent;
+    counter-reset:code-line;
+    font-size:12.5px;
+    line-height:1.75;
+  }
+  .code-example-wrap .code-line{
+    display:block;
+    min-height:1.75em;
+    padding:0 18px 0 58px;
+    position:relative;
+  }
+  .code-example-wrap .code-line::before{
+    content:counter(code-line);
+    counter-increment:code-line;
+    position:absolute;
+    top:0;
+    left:0;
+    width:38px;
+    padding-right:10px;
+    color:#b0b7c1;
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    text-align:right;
+    user-select:none;
+  }
+  .code-example-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    min-height:48px;
+    padding:8px 10px 8px 14px;
+    border-bottom:1px solid #d9dce5;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.95);
+  }
+  .code-example-meta{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    min-width:0;
+  }
+  .code-example-meta::before{
+    content:"";
+    width:8px;
+    height:8px;
+    flex-shrink:0;
+    border-radius:50%;
+    background:var(--play-accent);
+    box-shadow:0 0 0 4px var(--play-accent-dim);
+  }
+  .code-example-header .lang-label{
+    color:var(--play-accent);
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    font-weight:600;
+    letter-spacing:.6px;
+    text-transform:uppercase;
+  }
+  .code-example-header .example-kind{
+    overflow:hidden;
+    color: var(--text-dim);
+    font-size:11.5px;
+    font-weight:500;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .code-example-actions{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    flex-shrink:0;
+  }
+  .copy-example-btn,
+  .try-example-btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    min-height:30px;
+    border-radius:8px;
+    font-size:11.5px;
+    font-weight:600;
+    white-space:nowrap;
+    transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease;
+  }
+  .copy-example-btn{
+    padding:0 9px;
+    border:1px solid transparent;
+    background:transparent;
+    color:var(--text-dim);
+  }
+  .copy-example-btn:hover{
+    background:var(--bg-sunken);
+    border-color:var(--border);
+    color:var(--text);
+  }
+  .copy-example-btn.copied{
+    color:var(--ok);
+  }
+  .try-example-btn{
+    padding:0 11px;
+    border:1px solid var(--play-accent);
+    background:var(--play-accent);
+    color:#fff;
+    box-shadow:0 1px 2px rgba(124,79,224,.2);
+  }
+  .try-example-btn:hover{
+    background:#6940ce;
+    border-color:#6940ce;
+    transform:translateY(-1px);
+  }
+  .copy-example-btn:focus-visible,
+  .try-example-btn:focus-visible{
+    outline:2px solid var(--play-accent);
+    outline-offset:2px;
+  }
+  #playground-panel.flash{
+    box-shadow:inset 0 0 0 2px var(--play-accent),var(--card-shadow);
+    transition:box-shadow .2s ease;
+  }
+
+  /* ---- RESIZER ---- */
+  #resizer{
+    width:14px;flex-shrink:0;cursor:col-resize;background:transparent;position:relative;
+  }
+  #resizer::before{
+    content:"";position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);
+    width:4px;border-radius:4px;background:transparent;transition:background .15s;
+  }
+  #resizer:hover::before, #resizer.dragging::before{background:var(--border);}
+  #resizer::after{
+    content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:2px;height:22px;background:var(--text-faint);border-radius:2px;
+  }
+
+  /* ---- PLAYGROUND (destra) — tema scuro dedicato ---- */
+  #playground-panel{
+    --accent:var(--play-accent); --accent-dim:rgba(167,139,250,.16);
+    --pg-bg:#0d1117; --pg-bg-elevated:#161b22; --pg-border:#2a323c;
+    --pg-text:#e6edf3; --pg-text-dim:#8b96a3; --pg-text-faint:#5c6773;
+    width:38%;min-width:320px;flex-shrink:0;
+    display:flex;flex-direction:column;min-height:0;
+    background:var(--pg-bg);color:var(--pg-text);
+    border:1px solid var(--pg-border);
+    border-radius:var(--radius-lg);
+    box-shadow:var(--card-shadow);
+    overflow:hidden;
+  }
+  #playground-panel .icon-btn{
+    background:var(--pg-bg-elevated);border:1px solid var(--pg-border);color:var(--pg-text-dim);
+  }
+  #playground-panel .icon-btn:hover{color:var(--pg-text);border-color:var(--pg-text-faint);}
+  #playground-panel .icon-btn.accent{color:#fff;background:#8f5cf0;border-color:#8f5cf0;}
+  #pg-toolbar{
+    display:flex;align-items:center;gap:8px;
+    padding:10px 14px;border-bottom:1px solid var(--pg-border);
+    background:var(--pg-bg-elevated);flex-shrink:0;
+  }
+  #pg-toolbar .spacer{flex:1;}
+  #pg-autosave{font-size:11px;color:var(--pg-text-faint);font-family:var(--font-mono);}
+  #pg-split{flex:1;display:flex;flex-direction:column;min-height:0;}
+  #pg-editor-wrap{flex:1 1 55%;min-height:80px;display:flex;flex-direction:column;border-bottom:none;}
+  #pg-editor-wrap .CodeMirror{flex:1;height:100%;font-family:var(--font-mono);font-size:12.5px;}
+  #pg-split-resizer{
+    height:12px;flex-shrink:0;cursor:row-resize;position:relative;
+    background:var(--pg-bg-elevated);touch-action:none;
+  }
+  #pg-split-resizer::before{
+    content:"";position:absolute;left:0;right:0;top:50%;height:3px;
+    transform:translateY(-50%);background:transparent;
+    transition:background .15s ease;
+  }
+  #pg-split-resizer::after{
+    content:"";position:absolute;left:50%;top:50%;width:28px;height:2px;
+    transform:translate(-50%,-50%);border-radius:2px;background:var(--pg-text-faint);
+  }
+  #pg-split-resizer:hover::before,
+  #pg-split-resizer.dragging::before{background:var(--play-accent);}
+  #pg-preview-wrap{flex:1 1 45%;min-height:80px;display:flex;flex-direction:column;background:var(--pg-bg);}
+  #pg-iframe{flex:1;border:none;width:100%;background:var(--pg-bg);}
+  #pg-console{
+    height:100px;flex-shrink:0;background:#0a0e13;border-top:1px solid var(--pg-border);
+    color:var(--pg-text);font-family:var(--font-mono);font-size:11.5px;overflow-y:auto;
+    padding:8px 12px;display:none;
+  }
+  #pg-console.visible{display:block;}
+  #pg-console .log-line{padding:2px 0;border-bottom:1px solid #1c232b;color:#c9d1d9;}
+  #pg-console .log-line.error{color:#ff7b72;}
+
+  /* ---------- MOBILE ---------- */
+  #mobile-bottom-nav{
+    display:none;
+    position:fixed;left:0;right:0;bottom:0;z-index:40;
+    background:var(--bg-elevated);border-top:1px solid var(--border);
+    padding:6px 10px calc(6px + env(safe-area-inset-bottom));
+    gap:6px;
+  }
+  #mobile-bottom-nav button{
+    flex:1;background:none;border:none;color:var(--text-faint);
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    padding:6px 4px;border-radius:10px;font-size:10.5px;font-weight:600;
+  }
+  #mobile-bottom-nav button.active{color:var(--wiki-accent);background:var(--wiki-accent-dim);}
+  #mobile-bottom-nav button[data-target="playground"].active{color:var(--play-accent);background:var(--play-accent-dim);}
+  #mobile-bottom-nav button svg{flex-shrink:0;}
+
+  @media (max-width:980px){
+    #app{padding:8px;}
+    #topbar{margin:8px 8px 0 8px;}
+    #mobile-bottom-nav{display:flex;}
+    #wiki-sidebar{
+      position:fixed;left:8px;top:70px;bottom:78px;z-index:30;width:84%;max-width:320px;
+      margin:0;
+      transform:translateX(-115%);transition:transform .2s ease;
+      box-shadow:0 10px 30px rgba(0,0,0,.18);
+    }
+    #wiki-sidebar.open{transform:translateX(0);}
+    #wiki-sidebar.collapsed{width:84%;max-width:320px;opacity:1;}
+    #sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:25;}
+    #sidebar-overlay.visible{display:block;}
+    #resizer{display:none;}
+    #doc-panel,#playground-panel{width:100% !important;display:none;margin-bottom:70px;}
+    #doc-panel.mobile-active,#playground-panel.mobile-active{display:flex;}
+    #brand span.full{display:none;}
+    .code-example-header{align-items:flex-start;padding:10px;}
+    .code-example-meta{padding:5px 2px;}
+    .code-example-header .example-kind{display:none;}
+    .copy-example-btn{width:30px;padding:0;}
+    .copy-example-btn .btn-text{display:none;}
+    .try-example-btn{padding:0 9px;}
+    .try-example-btn .btn-text{font-size:0;}
+    .try-example-btn .btn-text::after{content:"Prova";font-size:11.5px;}
+    .code-example-wrap .code-line{padding-left:48px;padding-right:14px;}
+    .code-example-wrap .code-line::before{width:31px;padding-right:7px;}
+  }
+
+  /* ---------- MODAL ---------- */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(20,22,25,.4);
+    display:none;align-items:center;justify-content:center;z-index:100;padding:20px;
+  }
+  .modal-overlay.visible{display:flex;}
+  .modal{
+    background:var(--bg);border:1px solid var(--border);
+    border-radius:14px;padding:24px;width:100%;max-width:420px;
+    max-height:85vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.15);
+  }
+  .modal h3{font-family:var(--font-display);margin:0 0 4px;font-size:17px;}
+  .modal p.hint{color:var(--text-dim);font-size:12.5px;line-height:1.5;margin:4px 0 16px;}
+  .modal label{display:block;font-size:12px;color:var(--text-dim);margin:12px 0 5px;font-weight:500;}
+  .modal input[type=text],.modal input[type=password]{
+    width:100%;background:var(--bg);border:1px solid var(--border);
+    color:var(--text);border-radius:8px;padding:9px 10px;font-size:13px;outline:none;
+  }
+  .modal input:focus{border-color:var(--accent);}
+  .modal-actions{display:flex;gap:8px;margin-top:20px;justify-content:flex-end;}
+  .btn-primary{background:var(--wiki-accent);border:none;color:#fff;font-weight:600;padding:9px 16px;border-radius:8px;font-size:13px;}
+  .btn-secondary{background:transparent;border:1px solid var(--border);color:var(--text-dim);padding:9px 16px;border-radius:8px;font-size:13px;}
+  .modal a{color:var(--wiki-accent);}
+  #settings-status-msg{font-size:12px;margin-top:10px;min-height:16px;}
+
+  /* ---- Autocompletamento Playground (tema scuro) ---- */
+  li.CodeMirror-hint-active{
+    background:#8f5cf0;
+    color:#fff;
+  }
+
+  /* ---- Ghost text (completamento inline grigio) ---- */
+  .pg-ghost-text{
+    color:#5c6773;
+    opacity:.75;
+    font-style:normal;
+    pointer-events:none;
+  }
+
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <button id="hamburger" title="Menu">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+  </button>
+  <div id="brand"><span class="dot"></span><span class="full">Learning Wiki</span></div>
+  <div id="mode-switch" class="viewer" role="group" aria-label="Modalità" title="Cambia modalità">
+    <span class="knob"></span>
+    <button type="button" class="mode-opt active" data-mode="viewer" aria-pressed="true">Viewer</button>
+    <button type="button" class="mode-opt" data-mode="admin" aria-pressed="false">Admin</button>
+  </div><div id="topbar-spacer"></div>
+  <div id="sync-status" class="status-idle" title="Apri impostazioni sincronizzazione"
+       role="button" tabindex="0" aria-label="Apri impostazioni sincronizzazione">
+    <span class="pulse"></span><span id="sync-status-text">non configurato</span>
+  </div>
+</div>
+
+<div id="app">
+  <div id="sidebar-overlay"></div>
+
+  <!-- SIDEBAR: TOPIC -->
+  <div id="wiki-sidebar">
+    <div id="sidebar-head">
+      <span class="label">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        Argomenti
+      </span>
+      <button id="btn-collapse-sidebar" title="Comprimi sidebar">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+      </button>
+    </div>
+    <div id="wiki-search"><input type="text" id="wiki-search-input" placeholder="Cerca file..."></div>
+    <div id="category-list"></div>
+    <div id="wiki-sidebar-footer">
+      <button class="side-btn" id="btn-new-category">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nuova categoria
+      </button>
+      <input type="file" id="file-input-md" accept=".md,.markdown,text/markdown" multiple style="display:none;">
+      <div class="footer-divider"></div>
+      <div id="footer-actions-row">
+        <button class="side-btn icon-only" id="btn-upload-md" title="Carica file .md">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 8 12 3 17 8"/><path d="M5 21h14"/></svg>
+          <span class="btn-label">Carica</span>
+        </button>
+        <button class="side-btn icon-only subtle" id="btn-export-current" disabled title="Esporta file corrente">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><path d="M12 15V3"/></svg>
+          <span class="btn-label">Download</span>
+        </button>
+        <button class="side-btn icon-only subtle" id="btn-export-all" title="Esporta tutti i file">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3.3 8.5l8.7 5 8.7-5"/><path d="M12 21.5V13"/></svg>
+          <span class="btn-label">Export</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTRO: DOCUMENTAZIONE -->
+  <div id="doc-panel" class="mobile-active">
+    <div id="wiki-empty">
+      <h2>Nessun file selezionato</h2>
+      <p>Seleziona un argomento dalla sidebar per iniziare a leggere.</p>
+      <p class="upload-hint" style="font-size:12px;color:var(--text-faint);margin-top:4px;">
+        In modalità Admin puoi caricare nuovi file .md.
+      </p>
+      <button class="side-btn" id="btn-empty-upload" style="margin-top:6px;">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 8 12 3 17 8"/><path d="M5 21h14"/></svg>
+        Carica file .md
+      </button>
+    </div>
+    <div id="file-panel">
+      <div id="file-header">
+        <input type="text" id="file-title-input" placeholder="Titolo file">
+        <div id="file-category-picker" class="category-picker">
+          <button class="category-picker-toggle" id="btn-category-toggle" type="button"
+                  aria-haspopup="listbox" aria-expanded="false" aria-label="Cambia categoria">
+            <svg class="category-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            </svg>
+            <span class="category-label" id="category-label">Categoria</span>
+            <svg class="chev-down" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+          <div id="category-dropdown" class="category-dropdown" role="listbox" aria-label="Categorie"></div>
+        </div>
+        <div id="file-actions-menu">
+          <button class="icon-btn" id="btn-actions-toggle" aria-haspopup="true" aria-expanded="false">
+            Azioni
+            <svg class="chev-down" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div id="actions-dropdown" role="menu">
+            <button class="actions-item" id="btn-toggle-edit" role="menuitem">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              Modifica
+            </button>
+            <button class="actions-item danger" id="btn-delete-file" role="menuitem">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+              Elimina
+            </button>
+          </div>
+        </div>
+      </div>
+      <div id="file-body">
+        <div id="md-viewer"></div>
+        <textarea id="md-editor" spellcheck="false"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div id="resizer"></div>
+
+  <!-- DESTRA: PLAYGROUND -->
+  <div id="playground-panel">
+    <div id="pg-toolbar">
+      <button class="icon-btn accent" id="btn-run">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Run
+      </button>
+      <button class="icon-btn" id="btn-reset">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+        Reset
+      </button>
+      <button class="icon-btn" id="btn-toggle-console">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        Console
+      </button>
+      <div class="spacer"></div>
+      <span id="pg-autosave">—</span>
+    </div>
+    <div id="pg-split">
+      <div id="pg-editor-wrap">
+        <div style="padding:4px 12px; font-size:10px; color:var(--pg-text-faint);
+        font-family:var(--font-mono); background:var(--pg-bg-elevated);
+        border-bottom:1px solid var(--pg-border); letter-spacing:.5px;">
+          EDITOR
+        </div>
+        <textarea id="pg-textarea"></textarea>
+      </div>
+
+      <div id="pg-split-resizer" role="separator" aria-label="Ridimensiona editor e anteprima"></div>
+
+      <div id="pg-preview-wrap">
+        <div style="padding:4px 12px; font-size:10px; color:var(--pg-text-faint);
+        font-family:var(--font-mono); background:var(--pg-bg);
+        border-bottom:1px solid var(--pg-border); letter-spacing:.5px;">
+          PREVIEW
+        </div>
+        <iframe id="pg-iframe" sandbox="allow-scripts"></iframe>
+      </div>
+    </div>
+    <div id="pg-console"></div>
+  </div>
+</div>
+
+<div id="mobile-bottom-nav">
+  <button id="btn-mobile-doc" class="active" data-target="doc">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+    Documentazione
+  </button>
+  <button id="btn-mobile-pg" data-target="playground">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="12" cy="12" rx="10" ry="4.2"/><ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4.2" transform="rotate(120 12 12)"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
+    Playground
+  </button>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <h3>Impostazioni sincronizzazione</h3>
+    <p class="hint">Learning Wiki salva i tuoi file e il codice del Playground in un
+      <a href="https://gist.github.com" target="_blank" rel="noopener">Gist GitHub</a> privato, così restano sincronizzati
+      tra dispositivi (e dentro Notion). Serve un token con permesso "gist":
+      <a href="https://github.com/settings/tokens/new?scopes=gist&description=Learning%20Wiki" target="_blank" rel="noopener">crealo qui</a>
+      (lo scope "gist" è già preselezionato), copialo qui sotto, poi premi "Crea nuovo Gist" per generarne
+      uno automaticamente — oppure incolla l'ID/URL di un Gist esistente.</p>
+    <label for="input-github-token">GitHub Token (scope "gist")</label>
+    <input type="password" id="input-github-token" placeholder="ghp_...">
+    <label for="input-gist-id">Gist ID (o URL)</label>
+    <input type="text" id="input-gist-id" placeholder="generato automaticamente...">
+    <div id="settings-status-msg"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-close-settings">Chiudi</button>
+      <button class="btn-secondary" id="btn-init-bin">Crea nuovo Gist</button>
+      <button class="btn-primary" id="btn-save-settings">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW CATEGORY MODAL -->
+<div class="modal-overlay" id="category-modal">
+  <div class="modal">
+    <h3>Nuova categoria</h3>
+    <label for="input-new-category">Nome categoria</label>
+    <input type="text" id="input-new-category" placeholder="es. React">
+    <div class="modal-actions">
+      <button class="btn-secondary" id="btn-cancel-category">Annulla</button>
+      <button class="btn-primary" id="btn-confirm-category">Crea</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js" integrity="sha512-..." crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/jsx/jsx.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+
+<script>
+(function(){
+  "use strict";
+
+  /* =========================================================
+     STATE & CONSTANTS
+  ========================================================= */
+  var LS_SETTINGS = "lw_settings_v4";
+  var LS_CACHE = "lw_cache_v1";
+  var LS_LAYOUT = "lw_layout_v1";
+  var SYNC_DEBOUNCE_MS = 60000;
+  var CACHE_DEBOUNCE_MS = 400;
+
+  var PUBLIC_GIST_ID = (document.querySelector('meta[name="gist-public-id"]')?.content || "");
+
+  var DEFAULT_PG_CODE = [
+    "const { useState, useEffect, useRef, useMemo, useCallback } = React;",
+    "",
+    "function App() {",
+    "  const [count, setCount] = useState(0);",
+    "  const renders = useRef(0);",
+    "  renders.current++;",
+    "",
+    "  useEffect(() => {",
+    "    console.log('Count cambiato:', count);",
+    "  }, [count]);",
+    "",
+    "  const doubled = useMemo(() => count * 2, [count]);",
+    "  const increment = useCallback(() => setCount(c => c + 1), []);",
+    "",
+    "  return (",
+    "    <div style={{ fontFamily: 'sans-serif', padding: 24, color: '#e6edf3' }}>",
+    "      <h2>Playground pronto ✌️</h2>",
+    "      <p>Count: {count} (doppio: {doubled})</p>",
+    "      <button onClick={increment} style={{ padding: '8px 14px', cursor: 'pointer' }}>+1</button>",
+    "      <p style={{ marginTop: 12, fontSize: 12, color: '#8b96a3' }}>Render #{renders.current}</p>",
+    "    </div>",
+    "  );",
+    "}",
+    "",
+    "ReactDOM.createRoot(document.getElementById('root')).render(<App />);",
+    ""
+  ].join("\n");
+
+  var state = {
+    wiki: { categories: [], files: [] },
+    playground: { code: DEFAULT_PG_CODE, updatedAt: 0 }
+  };
+
+  var settings = { githubToken: "", gistId: "" };
+  var activeFileId = null;
+  var isEditingFile = false;
+  var syncTimer = null;
+  var cacheTimer = null;
+  var remoteSyncBlockedUntil = 0;
+  var cm = null;
+  var lastSyncError = "";
+  var collapsedCategories = {};
+  var isAdminMode = false;
+  var titleDebounceTimer = null;
+
+  /* =========================================================
+   ADMIN MODE
+========================================================= */
+  // Aggiungi questa sezione intera prima di INIT
+
+  function detectAdminMode(){
+    // attivazione via ?admin=1 nell'URL
+    if(/[?&]admin=1/.test(window.location.search)) return true;
+    // oppure se ha già un token salvato in localStorage
+    if(settings.githubToken) return true;
+    return false;
+  }
+
+  function setAdminMode(on){
+    isAdminMode = on;
+    document.body.classList.toggle("viewer-mode", !on);
+    var sw = document.getElementById("mode-switch");
+    if(!sw) return;
+    sw.classList.toggle("admin", on);
+    sw.classList.toggle("viewer", !on);
+    Array.prototype.forEach.call(sw.querySelectorAll(".mode-opt"), function(btn){
+      var active = (btn.getAttribute("data-mode") === "admin") === on;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  }
+
+
+  document.getElementById("mode-switch").addEventListener("click", function(e){
+    var btn = e.target.closest(".mode-opt");
+    if(!btn) return;
+    var wantAdmin = btn.getAttribute("data-mode") === "admin";
+    if(wantAdmin === isAdminMode) return;
+
+    if(wantAdmin){
+      // Viewer → Admin: serve il token, setAdminMode(true) avviene
+      // nel flusso di btn-save-settings dopo il pull riuscito
+      openSettings();
+    } else {
+      if(!confirm("Uscire dalla modalità Admin e tornare a Viewer?")) return;
+      settings.githubToken = "";
+      saveSettingsLocal();
+      setAdminMode(false);
+      refreshSyncStatusIdle();
+    }
+  });
+
+  /* =========================================================
+     STORAGE HELPERS
+  ========================================================= */
+  function loadSettings(){
+    try{
+      var raw = localStorage.getItem(LS_SETTINGS);
+      if(raw) settings = JSON.parse(raw);
+    }catch(e){}
+  }
+  function saveSettingsLocal(){ localStorage.setItem(LS_SETTINGS, JSON.stringify(settings)); }
+  function loadCache(){
+    try{
+      var raw = localStorage.getItem(LS_CACHE);
+      if(raw){
+        var parsed = JSON.parse(raw);
+        if(parsed.wiki) state.wiki = parsed.wiki;
+        if(parsed.playground) state.playground = parsed.playground;
+      }
+    }catch(e){}
+  }
+  function saveCache(){
+    localStorage.setItem(LS_CACHE, JSON.stringify(state));
+  }
+
+  function scheduleCacheSave(){
+    if(cacheTimer) clearTimeout(cacheTimer);
+
+    cacheTimer = setTimeout(function(){
+      cacheTimer = null;
+      saveCache();
+    }, CACHE_DEBOUNCE_MS);
+  }
+
+  window.addEventListener("pagehide", function(){
+    if(cacheTimer){
+      clearTimeout(cacheTimer);
+      cacheTimer = null;
+      saveCache();
+    }
+  });
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+  /* =========================================================
+     SYNC (GitHub Gist)
+  ========================================================= */
+  var GIST_API = "https://api.github.com/gists";
+  var GIST_FILENAME = "learning-wiki-data.json";
+  function isConfigured(){ return !!(settings.githubToken && settings.gistId); }
+
+  // Estrae un messaggio d'errore leggibile dalla risposta di GitHub
+  function extractHttpError(res){
+    return res.text().then(function(text){
+      var detail = "";
+      try{
+        var json = JSON.parse(text);
+        detail = json.message || "";
+        if(json.errors && json.errors.length){
+          detail += " (" + json.errors.map(function(e){
+            return e.message || (e.field + " " + e.code);
+          }).join("; ") + ")";
+        }
+      }catch(e){}
+      var msg = "HTTP " + res.status + (res.statusText ? " " + res.statusText : "");
+      if(detail) msg += " – " + detail;
+      return new Error(msg);
+    });
+  }
+  // Aggiungi: lettura pubblica senza token (per viewer mode)
+  function pullPublic(){
+    var gistId = settings.gistId || PUBLIC_GIST_ID;
+    if(!gistId) return Promise.resolve(false);
+    setSyncStatus("syncing", "caricamento...");
+    return fetch(GIST_API + "/" + gistId)   // nessun Authorization header
+            .then(function(res){
+              if(!res.ok) throw new Error("HTTP " + res.status);
+              return res.json();
+            }).then(function(data){
+              var file = data && data.files && data.files[GIST_FILENAME];
+              if(!file) throw new Error("File non trovato nel gist");
+              var contentPromise = file.truncated
+                      ? fetch(file.raw_url).then(function(r){ return r.text(); })
+                      : Promise.resolve(file.content);
+              return contentPromise.then(function(text){
+                var parsed = JSON.parse(text || "{}");
+                if(parsed && parsed.wiki){
+                  state.wiki = parsed.wiki;
+                  state.playground = parsed.playground || state.playground;
+                  saveCache();
+                }
+                setSyncStatus("synced", "sincronizzato");
+                return true;
+              });
+            }).catch(function(err){
+              console.warn("Pull pubblico fallito:", err);
+              setSyncStatus("error", "errore caricamento");
+              return false;
+            });
+  }
+
+  function setSyncStatus(status, text, detail){
+    var el = document.getElementById("sync-status");
+    el.className = "status-" + status;
+    document.getElementById("sync-status-text").textContent = text;
+    el.title = detail || "Apri impostazioni sincronizzazione";
+  }
+  function refreshSyncStatusIdle(){
+    if(!isConfigured()) setSyncStatus("idle", "non configurato");
+    else setSyncStatus("synced", "sincronizzato");
+  }
+
+  function ghHeaders(extra){
+    var h = {
+      "Accept": "application/vnd.github+json",
+      "Authorization": "token " + settings.githubToken
+    };
+    if(extra) for(var k in extra) h[k] = extra[k];
+    return h;
+  }
+
+  function parseGistId(input){
+    input = (input || "").trim();
+    if(!input) return null;
+    input = input.split("?")[0].split("#")[0];
+    var parts = input.split("/").filter(Boolean);
+    var last = parts[parts.length - 1] || input;
+    if(/^[0-9a-f]{10,40}$/i.test(last)) return last;
+    return null;
+  }
+
+  function pullFromRemote(){
+    if(!isConfigured()) return Promise.resolve(false);
+    setSyncStatus("syncing", "sincronizzazione...");
+    return fetch(GIST_API + "/" + settings.gistId, { headers: ghHeaders() })
+            .then(function(res){
+              if(!res.ok) return extractHttpError(res).then(function(err){ throw err; });
+              return res.json();
+            }).then(function(data){
+      var file = data && data.files && data.files[GIST_FILENAME];
+      if(!file) throw new Error("File non trovato nel gist");
+      var contentPromise = file.truncated
+        ? fetch(file.raw_url).then(function(r){ return r.text(); })
+        : Promise.resolve(file.content);
+      return contentPromise.then(function(text){
+        var parsed = JSON.parse(text || "{}");
+        if(parsed && parsed.wiki){
+          state.wiki = parsed.wiki;
+          state.playground = parsed.playground || state.playground;
+          saveCache();
+        }
+        setSyncStatus("synced", "sincronizzato");
+        return true;
+      });
+            }).catch(function(err){
+              console.warn("Pull gist fallito:", err);
+              setSyncStatus("error", "errore lettura", err.message);
+              lastSyncError = err.message;
+              return false;
+            });
+  }
+
+  function pushToRemote(){
+    if(!isConfigured()) return Promise.resolve(false);
+
+    if(Date.now() < remoteSyncBlockedUntil){
+      var remainingMinutes = Math.ceil(
+              (remoteSyncBlockedUntil - Date.now()) / 60000
+      );
+
+      setSyncStatus(
+              "error",
+              "limite GitHub raggiunto",
+              "Nuovo tentativo tra circa " + remainingMinutes + " minuti."
+      );
+
+      return Promise.resolve(false);
+    }
+
+    setSyncStatus("syncing", "salvataggio...");
+
+    var body = { files: {} };
+    body.files[GIST_FILENAME] = { content: JSON.stringify(state) };
+
+    return fetch(GIST_API + "/" + settings.gistId, {
+      method: "PATCH",
+      headers: ghHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body)
+    }).then(function(res){
+      if(!res.ok){
+        var remaining = res.headers.get("X-RateLimit-Remaining");
+        var reset = res.headers.get("X-RateLimit-Reset");
+
+        if(res.status === 403 && remaining === "0"){
+          var resetTime = reset ? Number(reset) * 1000 : Date.now() + 3600000;
+
+          // Aggiunge un minuto di margine per evitare un nuovo 403
+          remoteSyncBlockedUntil = resetTime + 60000;
+        }
+
+        return extractHttpError(res).then(function(err){
+          throw err;
+        });
+      }
+
+      lastSyncError = "";
+      setSyncStatus("synced", "sincronizzato");
+      return true;
+    }).catch(function(err){
+      console.warn("Push gist fallito:", err);
+
+      setSyncStatus(
+              "error",
+              remoteSyncBlockedUntil > Date.now()
+                      ? "limite GitHub raggiunto"
+                      : "errore salvataggio",
+              err.message
+      );
+
+      lastSyncError = err.message;
+      return false;
+    });
+  }
+
+  function createRemoteItem(){
+    setSyncStatus("syncing", "creazione...");
+    var body = { description: "Learning Wiki - dati sincronizzati", public: false, files: {} };
+    body.files[GIST_FILENAME] = { content: JSON.stringify(state) };
+    return fetch(GIST_API, {
+      method: "POST",
+      headers: ghHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body)
+    }).then(function(res){
+      if(!res.ok) return extractHttpError(res).then(function(err){ throw err; });
+      return res.json();
+    }).then(function(data){
+      if(!data || !data.id) throw new Error("Risposta inattesa dal server");
+      settings.gistId = data.id;
+      saveSettingsLocal();
+      setSyncStatus("synced", "sincronizzato");
+      return true;
+    }).catch(function(err){
+      console.warn("Creazione gist fallita:", err);
+      setSyncStatus("error", "errore creazione", err.message);
+      lastSyncError = err.message;
+      return false;
+    });
+  }
+
+  function scheduleSync(){
+    scheduleCacheSave();
+
+    if(!isConfigured()){
+      setSyncStatus("idle", "non configurato");
+      return;
+    }
+
+    if(Date.now() < remoteSyncBlockedUntil){
+      var remainingMinutes = Math.ceil(
+              (remoteSyncBlockedUntil - Date.now()) / 60000
+      );
+
+      setSyncStatus(
+              "error",
+              "limite GitHub raggiunto",
+              "Nuovo tentativo tra circa " + remainingMinutes + " minuti."
+      );
+
+      return;
+    }
+
+    setSyncStatus("syncing", "in attesa...");
+
+    if(syncTimer) clearTimeout(syncTimer);
+
+    syncTimer = setTimeout(function(){
+      syncTimer = null;
+      pushToRemote();
+    }, SYNC_DEBOUNCE_MS);
+  }
+
+  /* =========================================================
+     MARKDOWN RENDERING
+  ========================================================= */
+  marked.setOptions({
+    highlight: function(code, lang){
+      codeRegistry.push({ code: code, lang: (lang || "").toLowerCase() });
+      try{
+        if(lang && hljs.getLanguage(lang)) return hljs.highlight(code, {language: lang}).value;
+        return hljs.highlightAuto(code).value;
+      }catch(e){ return code; }
+    },
+    breaks: true
+  });
+  var codeRegistry = [];
+  var RUNNABLE_LANGS = ["jsx","js","javascript","react"];
+
+  function renderMarkdown(mdText){
+    codeRegistry = [];
+    var rawHtml = marked.parse(mdText || "");
+    document.getElementById("md-viewer").innerHTML = DOMPurify.sanitize(rawHtml);
+    attachTryExampleButtons();
+  }
+
+  function copyExampleCode(code, btn){
+    function setCopiedState(){
+      btn.classList.add("copied");
+      btn.setAttribute("aria-label", "Codice copiato");
+      btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span class="btn-text">Copiato</span>';
+
+      setTimeout(function(){
+        btn.classList.remove("copied");
+        btn.setAttribute("aria-label", "Copia codice");
+        btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="btn-text">Copia</span>';
+      }, 1800);
+    }
+
+    if(navigator.clipboard && window.isSecureContext){
+      navigator.clipboard.writeText(code).then(setCopiedState).catch(function(){});
+      return;
+    }
+
+    var textarea = document.createElement("textarea");
+    textarea.value = code;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textarea);
+    setCopiedState();
+  }
+
+  function addLineNumbers(codeEl){
+    var lines = codeEl.innerHTML.split("\n");
+    codeEl.innerHTML = lines.map(function(line){
+      return '<span class="code-line">' + (line || "&nbsp;") + "</span>";
+    }).join("");
+  }
+
+  function attachTryExampleButtons(){
+    var blocks = document.querySelectorAll("#md-viewer pre code");
+    blocks.forEach(function(codeEl, i){
+      var entry = codeRegistry[i];
+      if(!entry) return;
+      var pre = codeEl.parentElement;
+      if(RUNNABLE_LANGS.indexOf(entry.lang) === -1) return;
+
+      addLineNumbers(codeEl);
+
+      var wrap = document.createElement("div");
+      wrap.className = "code-example-wrap";
+
+      var header = document.createElement("div");
+      header.className = "code-example-header";
+
+      var meta = document.createElement("div");
+      meta.className = "code-example-meta";
+
+      var label = document.createElement("span");
+      label.className = "lang-label";
+      label.textContent = entry.lang || "code";
+
+      var kind = document.createElement("span");
+      kind.className = "example-kind";
+      kind.textContent = "Esempio interattivo";
+
+      var actions = document.createElement("div");
+      actions.className = "code-example-actions";
+
+      var copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "copy-example-btn";
+      copyBtn.setAttribute("aria-label", "Copia codice");
+      copyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="btn-text">Copia</span>';
+      copyBtn.addEventListener("click", function(){
+        copyExampleCode(entry.code, copyBtn);
+      });
+
+      var tryBtn = document.createElement("button");
+      tryBtn.type = "button";
+      tryBtn.className = "try-example-btn";
+      tryBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><polygon points="6 4 19 12 6 20"/></svg><span class="btn-text">Apri nel Playground</span>';
+      tryBtn.addEventListener("click", function(){
+        loadIntoPlayground(entry.code);
+      });
+
+      meta.appendChild(label);
+      meta.appendChild(kind);
+      actions.appendChild(copyBtn);
+      actions.appendChild(tryBtn);
+      header.appendChild(meta);
+      header.appendChild(actions);
+
+      pre.parentNode.insertBefore(wrap, pre);
+      wrap.appendChild(header);
+      wrap.appendChild(pre);
+    });
+  }
+
+  function loadIntoPlayground(code){
+    if(!cm) return;
+    cm.setValue(code);
+    state.playground.code = code;
+    state.playground.updatedAt = Date.now();
+    scheduleSync();
+    showMobilePanel("playground");
+    runPlayground();
+    var pg = document.getElementById("playground-panel");
+    pg.classList.add("flash");
+    setTimeout(function(){ pg.classList.remove("flash"); }, 700);
+  }
+
+  /* =========================================================
+     SIDEBAR RENDERING
+  ========================================================= */
+
+  function updateActiveTitleInSidebar(newTitle){
+    var item = document.querySelector(".file-item.active .fname");
+    if(item) item.textContent = newTitle;
+  }
+
+  function updateCategoryCount(cat){
+    var heads = document.querySelectorAll(".category-head");
+    heads.forEach(function(head){
+      var nameSpan = head.querySelectorAll("span")[1]; // secondo span = nome categoria
+      if(nameSpan && nameSpan.textContent === cat){
+        var countEl = head.querySelector(".count");
+        if(countEl) countEl.textContent = getFilesByCategory(cat).length;
+      }
+    });
+  }
+  function getFilesByCategory(cat){
+    var q = (document.getElementById("wiki-search-input").value || "").toLowerCase().trim();
+    return state.wiki.files.filter(function(f){
+      if(f.category !== cat) return false;
+      if(q && f.title.toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    });
+  }
+
+  function appendSidebarFileItem(file, container, showCategory){
+    var item = document.createElement("div");
+    item.className = "file-item" + (file.id === activeFileId ? " active" : "");
+    item.innerHTML =
+            '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' +
+            '<span class="fname">' + escapeHtml(file.title) + '</span>' +
+            (showCategory ? '<span class="file-category">' + escapeHtml(file.category) + '</span>' : '');
+
+    item.addEventListener("click", function(){
+      openFile(file.id);
+      closeMobileSidebar();
+      showMobilePanel("doc");
+    });
+
+    container.appendChild(item);
+  }
+
+  function renderSidebar(){
+    var list = document.getElementById("category-list");
+    var q = (document.getElementById("wiki-search-input").value || "").toLowerCase().trim();
+    var recentFiles = state.wiki.files
+            .filter(function(file){
+              return file.recentlyOpenedAt &&
+                      (!q || file.title.toLowerCase().indexOf(q) !== -1);
+            })
+            .sort(function(a, b){ return b.recentlyOpenedAt - a.recentlyOpenedAt; })
+            .slice(0, 2);
+
+    list.innerHTML = "";
+
+    if(recentFiles.length){
+      var recentBlock = document.createElement("div");
+      recentBlock.className = "recent-block";
+      recentBlock.innerHTML =
+              '<div class="category-head">' +
+              '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><polyline points="12 8 12 12 15 14"/></svg>' +
+              '<span>Recenti</span>' +
+              '</div>';
+
+      var recentList = document.createElement("div");
+      recentList.className = "recent-files";
+      recentFiles.forEach(function(file){
+        appendSidebarFileItem(file, recentList, true);
+      });
+
+      recentBlock.appendChild(recentList);
+      list.appendChild(recentBlock);
+    }
+
+    state.wiki.categories.forEach(function(cat){
+      var block = document.createElement("div");
+      block.className = "category-block";
+
+      var head = document.createElement("div");
+      head.className = "category-head" + (collapsedCategories[cat] !== false ? " collapsed" : "");
+
+      var files = getFilesByCategory(cat);
+      head.innerHTML = '<span class="chev">▾</span>' +
+              '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>' +
+              '<span>' + escapeHtml(cat) +
+              '</span><span class="count">' + files.length + '</span><span class="del-cat" title="Elimina categoria"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="4" x2="14" y2="14"/><line x1="14" y1="4" x2="4" y2="14"/></svg></span>';
+
+      head.addEventListener("click", function(e){
+        if(e.target.closest(".del-cat")){
+          e.stopPropagation();
+          deleteCategory(cat);
+          return;
+        }
+
+        // aperto sse === false; qualsiasi altro valore (incluso undefined) è "chiuso"
+        var isOpen = collapsedCategories[cat] === false;
+        collapsedCategories[cat] = isOpen ? true : false;
+        renderSidebar();
+      });
+
+      block.appendChild(head);
+
+      if(collapsedCategories[cat] === false){
+        var fileList = document.createElement("div");
+        fileList.className = "file-list";
+
+        files.forEach(function(file){
+          appendSidebarFileItem(file, fileList, false);
+        });
+
+        block.appendChild(fileList);
+      }
+
+      list.appendChild(block);
+    });
+
+    renderCategorySelect();
+  }
+
+  function renderCategorySelect(){
+    var dropdown = document.getElementById("category-dropdown");
+    var label = document.getElementById("category-label");
+    var toggle = document.getElementById("btn-category-toggle");
+    var activeFile = getActiveFile();
+    var selectedCategory = activeFile ? activeFile.category : "";
+
+    label.textContent = selectedCategory || "Categoria";
+    toggle.disabled = state.wiki.categories.length === 0;
+    dropdown.innerHTML = "";
+
+    state.wiki.categories.forEach(function(cat){
+      var option = document.createElement("button");
+      var isSelected = cat === selectedCategory;
+
+      option.type = "button";
+      option.className = "category-option" + (isSelected ? " selected" : "");
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", isSelected ? "true" : "false");
+      option.setAttribute("data-category", cat);
+
+      var name = document.createElement("span");
+      name.className = "option-name";
+      name.textContent = cat;
+      option.appendChild(name);
+
+      if(isSelected){
+        var check = document.createElement("span");
+        check.className = "check";
+        check.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12 10 17 19 7"/></svg>';
+        option.appendChild(check);
+      }
+
+      dropdown.appendChild(option);
+    });
+  }
+
+  function escapeHtml(s){
+    var d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  /* =========================================================
+     CATEGORY CRUD
+  ========================================================= */
+  function createCategory(name){
+    name = name.trim();
+    if(!name) return;
+    if(state.wiki.categories.indexOf(name) !== -1) return;
+    state.wiki.categories.push(name);
+    renderSidebar();
+    scheduleSync();
+  }
+
+  function deleteCategory(cat){
+    var filesInCat = state.wiki.files.filter(function(f){ return f.category === cat; });
+    var msg = filesInCat.length
+      ? 'Eliminare la categoria "' + cat + '" e i suoi ' + filesInCat.length + ' file?'
+      : 'Eliminare la categoria "' + cat + '"?';
+    if(!confirm(msg)) return;
+    state.wiki.categories = state.wiki.categories.filter(function(c){ return c !== cat; });
+    var deletedIds = filesInCat.map(function(f){ return f.id; });
+    state.wiki.files = state.wiki.files.filter(function(f){ return f.category !== cat; });
+    if(deletedIds.indexOf(activeFileId) !== -1) closeFilePanel();
+    renderSidebar();
+    scheduleSync();
+  }
+
+  /* =========================================================
+     FILE CRUD
+  ========================================================= */
+  function addFile(title, content, category){
+    if(!category){
+      if(!state.wiki.categories.length) createCategory("Generale");
+      category = state.wiki.categories[0];
+    }
+    var file = { id: uid(), title: title, category: category, content: content, updatedAt: Date.now() };
+    state.wiki.files.push(file);
+    renderSidebar();
+    scheduleSync();
+    openFile(file.id);
+  }
+
+  function openFile(id){
+    var file = state.wiki.files.find(function(f){ return f.id === id; });
+    if(!file) return;
+
+    file.recentlyOpenedAt = Date.now();
+    saveCache();
+
+    activeFileId = id;
+    isEditingFile = false;
+    document.getElementById("wiki-empty").style.display = "none";
+    document.getElementById("file-panel").classList.add("active");
+    document.getElementById("file-title-input").value = file.title;
+    renderCategorySelect();
+    renderMarkdown(file.content);
+    document.getElementById("md-editor").value = file.content;
+    setEditMode(false);
+    renderSidebar();
+    updateExportButtonState();
+  }
+
+  function closeFilePanel(){
+    activeFileId = null;
+    document.getElementById("file-panel").classList.remove("active");
+    document.getElementById("wiki-empty").style.display = "flex";
+    updateExportButtonState();
+  }
+
+  function updateExportButtonState(){
+    var btn = document.getElementById("btn-export-current");
+    if(btn) btn.disabled = !activeFileId;
+  }
+
+  function getActiveFile(){ return state.wiki.files.find(function(f){ return f.id === activeFileId; }); }
+
+  var ICON_PENCIL = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+  var ICON_EYE = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>';
+
+  function setEditMode(on){
+    isEditingFile = on;
+    document.getElementById("md-viewer").classList.toggle("hidden", on);
+    document.getElementById("md-editor").classList.toggle("active", on);
+    var editIcon = on ? ICON_EYE : ICON_PENCIL;
+    document.getElementById("btn-toggle-edit").innerHTML = editIcon + (on ? "Anteprima" : "Modifica");
+  }
+
+  function deleteActiveFile(){
+    var file = getActiveFile();
+    if(!file) return;
+    if(!confirm('Eliminare il file "' + file.title + '"?')) return;
+    state.wiki.files = state.wiki.files.filter(function(f){ return f.id !== file.id; });
+    closeFilePanel();
+    renderSidebar();
+    scheduleSync();
+  }
+
+  /* =========================================================
+     EVENT WIRING: DOC
+  ========================================================= */
+  document.getElementById("file-title-input").addEventListener("input", function(e){
+    var file = getActiveFile();
+    if(!file) return;
+    file.title = e.target.value; file.updatedAt = Date.now();
+    renderSidebar(); scheduleSync();
+  });
+
+  (function initCategoryPicker(){
+    var picker = document.getElementById("file-category-picker");
+    var toggle = document.getElementById("btn-category-toggle");
+    var dropdown = document.getElementById("category-dropdown");
+
+    function closePicker(){
+      picker.classList.remove("open");
+      toggle.setAttribute("aria-expanded", "false");
+    }
+
+    toggle.addEventListener("click", function(e){
+      e.stopPropagation();
+      if(toggle.disabled) return;
+
+      var willOpen = !picker.classList.contains("open");
+      picker.classList.toggle("open", willOpen);
+      toggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    });
+
+    dropdown.addEventListener("click", function(e){
+      var option = e.target.closest(".category-option");
+      if(!option) return;
+
+      var file = getActiveFile();
+      if(!file) return;
+
+      file.category = option.getAttribute("data-category");
+      file.updatedAt = Date.now();
+      closePicker();
+      renderSidebar();
+      scheduleSync();
+    });
+
+    document.addEventListener("click", function(e){
+      if(!picker.contains(e.target)) closePicker();
+    });
+
+    document.addEventListener("keydown", function(e){
+      if(e.key === "Escape") closePicker();
+    });
+  })();
+
+  document.getElementById("btn-toggle-edit").addEventListener("click", function(){ setEditMode(!isEditingFile); });
+
+  /* ---- Menu Azioni (dropdown) ---- */
+  (function initActionsMenu(){
+    var menu = document.getElementById("file-actions-menu");
+    var toggle = document.getElementById("btn-actions-toggle");
+    function closeMenu(){
+      menu.classList.remove("open");
+      toggle.setAttribute("aria-expanded", "false");
+    }
+    toggle.addEventListener("click", function(e){
+      e.stopPropagation();
+      var willOpen = !menu.classList.contains("open");
+      menu.classList.toggle("open", willOpen);
+      toggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    });
+    // chiudi il menu dopo aver cliccato una voce
+    menu.querySelectorAll(".actions-item").forEach(function(item){
+      item.addEventListener("click", closeMenu);
+    });
+    // chiudi cliccando fuori
+    document.addEventListener("click", function(e){
+      if(!menu.contains(e.target)) closeMenu();
+    });
+    // chiudi con Esc
+    document.addEventListener("keydown", function(e){
+      if(e.key === "Escape") closeMenu();
+    });
+  })();
+
+  document.getElementById("md-editor").addEventListener("input", function(e){
+    var file = getActiveFile();
+    if(!file) return;
+    file.content = e.target.value; file.updatedAt = Date.now();
+    renderMarkdown(file.content); scheduleSync();
+  });
+  document.getElementById("btn-delete-file").addEventListener("click", deleteActiveFile);
+  document.getElementById("wiki-search-input").addEventListener("input", renderSidebar);
+  document.getElementById("btn-new-category").addEventListener("click", openCategoryModal);
+
+  function triggerUpload(){ document.getElementById("file-input-md").click(); }
+  document.getElementById("btn-upload-md").addEventListener("click", triggerUpload);
+  document.getElementById("btn-empty-upload").addEventListener("click", triggerUpload);
+  document.getElementById("file-input-md").addEventListener("change", function(e){
+    var files = Array.from(e.target.files || []);
+    files.forEach(function(f){
+      var reader = new FileReader();
+      reader.onload = function(){
+        var title = f.name.replace(/\.(md|markdown)$/i, "");
+        addFile(title, reader.result, state.wiki.categories[0]);
+        showMobilePanel("doc");
+      };
+      reader.readAsText(f);
+    });
+    e.target.value = "";
+  });
+
+  function openCategoryModal(){
+    document.getElementById("input-new-category").value = "";
+    document.getElementById("category-modal").classList.add("visible");
+    setTimeout(function(){ document.getElementById("input-new-category").focus(); }, 50);
+  }
+  function closeCategoryModal(){ document.getElementById("category-modal").classList.remove("visible"); }
+  document.getElementById("btn-cancel-category").addEventListener("click", closeCategoryModal);
+  document.getElementById("btn-confirm-category").addEventListener("click", function(){
+    createCategory(document.getElementById("input-new-category").value);
+    closeCategoryModal();
+  });
+  document.getElementById("input-new-category").addEventListener("keydown", function(e){
+    if(e.key === "Enter"){ createCategory(e.target.value); closeCategoryModal(); }
+  });
+
+  /* =========================================================
+     MOBILE (sidebar drawer + doc/playground switch)
+  ========================================================= */
+  /* =========================================================
+     SIDEBAR TOGGLE (drawer su mobile, collapse su desktop)
+  ========================================================= */
+  var LS_SIDEBAR = "lw_sidebar_collapsed_v1";
+  function isMobileViewport(){ return window.matchMedia("(max-width:980px)").matches; }
+
+  function toggleSidebar(){
+    if(isMobileViewport()){
+      var sb = document.getElementById("wiki-sidebar");
+      if(sb.classList.contains("open")) closeMobileSidebar();
+      else {
+        sb.classList.add("open");
+        document.getElementById("sidebar-overlay").classList.add("visible");
+      }
+    } else {
+      var sb2 = document.getElementById("wiki-sidebar");
+      sb2.classList.toggle("collapsed");
+      localStorage.setItem(LS_SIDEBAR, sb2.classList.contains("collapsed") ? "1" : "0");
+    }
+  }
+  document.getElementById("hamburger").addEventListener("click", toggleSidebar);
+  document.getElementById("btn-collapse-sidebar").addEventListener("click", toggleSidebar);
+  document.getElementById("sidebar-overlay").addEventListener("click", closeMobileSidebar);
+  function closeMobileSidebar(){
+    document.getElementById("wiki-sidebar").classList.remove("open");
+    document.getElementById("sidebar-overlay").classList.remove("visible");
+  }
+  window.addEventListener("resize", function(){
+    if(isMobileViewport()){
+      document.getElementById("wiki-sidebar").classList.remove("collapsed");
+    } else {
+      closeMobileSidebar();
+    }
+  });
+
+  function showMobilePanel(which){
+    var doc = document.getElementById("doc-panel");
+    var pg = document.getElementById("playground-panel");
+    doc.classList.toggle("mobile-active", which === "doc");
+    pg.classList.toggle("mobile-active", which === "playground");
+    document.getElementById("btn-mobile-doc").classList.toggle("active", which === "doc");
+    document.getElementById("btn-mobile-pg").classList.toggle("active", which === "playground");
+    if(which === "playground" && cm) setTimeout(function(){ cm.refresh(); }, 30);
+  }
+  document.getElementById("btn-mobile-doc").addEventListener("click", function(){ showMobilePanel("doc"); });
+  document.getElementById("btn-mobile-pg").addEventListener("click", function(){ showMobilePanel("playground"); });
+
+  /* =========================================================
+     RESIZER (desktop, drag tra doc-panel e playground-panel)
+  ========================================================= */
+  (function initResizer(){
+    var resizer = document.getElementById("resizer");
+    var pgPanel = document.getElementById("playground-panel");
+    var appEl = document.getElementById("app");
+    var dragging = false;
+
+    var savedWidth = localStorage.getItem(LS_LAYOUT);
+    if(savedWidth) pgPanel.style.width = savedWidth;
+
+    resizer.addEventListener("mousedown", function(e){
+      dragging = true;
+      resizer.classList.add("dragging");
+      document.body.style.userSelect = "none";
+      e.preventDefault();
+    });
+    window.addEventListener("mousemove", function(e){
+      if(!dragging) return;
+      var appRect = appEl.getBoundingClientRect();
+      var newWidth = appRect.right - 12 - e.clientX;
+      var min = 300, max = appRect.width * 0.7;
+      if(newWidth < min) newWidth = min;
+      if(newWidth > max) newWidth = max;
+      pgPanel.style.width = newWidth + "px";
+    });
+    window.addEventListener("mouseup", function(){
+      if(!dragging) return;
+      dragging = false;
+      resizer.classList.remove("dragging");
+      document.body.style.userSelect = "";
+      localStorage.setItem(LS_LAYOUT, pgPanel.style.width);
+      if(cm) cm.refresh();
+    });
+  })();
+
+
+  /*Select the playground split resizer*/
+  (function initPlaygroundSplitResizer(){
+    var split = document.getElementById("pg-split");
+    var editor = document.getElementById("pg-editor-wrap");
+    var preview = document.getElementById("pg-preview-wrap");
+    var resizer = document.getElementById("pg-split-resizer");
+    var iframe = document.getElementById("pg-iframe");
+    var dragging = false;
+
+    resizer.addEventListener("pointerdown", function(e){
+      dragging = true;
+      resizer.classList.add("dragging");
+      document.body.style.userSelect = "none";
+      iframe.style.pointerEvents = "none";
+      resizer.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+
+    resizer.addEventListener("pointermove", function(e){
+      if(!dragging) return;
+
+      var splitRect = split.getBoundingClientRect();
+      var minHeight = 110;
+      var maxHeight = splitRect.height - resizer.offsetHeight - minHeight;
+      var editorHeight = e.clientY - splitRect.top;
+
+      editorHeight = Math.max(minHeight, Math.min(editorHeight, maxHeight));
+      editor.style.flex = "0 0 " + editorHeight + "px";
+      preview.style.flex = "1 1 auto";
+
+      if(cm) cm.refresh();
+    });
+
+    function stopDragging(){
+      if(!dragging) return;
+      dragging = false;
+      resizer.classList.remove("dragging");
+      document.body.style.userSelect = "";
+      iframe.style.pointerEvents = "";
+
+      if(cm) cm.refresh();
+    }
+
+    resizer.addEventListener("pointerup", stopDragging);
+    resizer.addEventListener("pointercancel", stopDragging);
+  })();
+
+  /* =========================================================
+     PLAYGROUND
+  ========================================================= */
+  // Parole suggerite "di base": keyword JS + Hook React + globali comuni
+  var PG_BASE_WORDS = [
+    // Hook React
+    "useState", "useEffect", "useRef", "useMemo", "useCallback",
+    "useContext", "useReducer", "useLayoutEffect", "useImperativeHandle",
+
+    // Globali del Playground
+    "React", "ReactDOM", "createRoot", "render", "console",
+
+    // Keyword / costrutti JavaScript comuni
+    "const", "let", "var", "function", "return", "if", "else",
+    "for", "while", "switch", "case", "break", "continue",
+    "try", "catch", "finally", "throw", "new", "typeof",
+    "instanceof", "delete", "void", "class", "extends", "super",
+    "import", "export", "default", "from", "async", "await",
+    "yield", "true", "false", "null", "undefined", "this",
+
+    // API DOM utilizzabili direttamente
+    "getElementById", "getElementsByClassName", "getElementsByTagName",
+    "querySelector", "querySelectorAll",
+    "createElement", "createTextNode", "createDocumentFragment",
+    "addEventListener", "removeEventListener",
+    "requestAnimationFrame", "cancelAnimationFrame",
+
+    // Proprietà/metodi DOM frequentemente utilizzati
+    "innerHTML", "outerHTML", "textContent", "innerText",
+    "value", "checked", "disabled", "className", "classList",
+    "style", "id", "title", "name", "dataset",
+    "getAttribute", "setAttribute", "removeAttribute",
+    "appendChild", "removeChild", "replaceChild",
+    "append", "prepend", "remove", "before", "after",
+    "closest", "matches", "contains",
+    "focus", "blur", "click"
+  ];
+
+// Suggerimenti contestuali dopo un punto.
+// Sono liste piccole e statiche: non vengono ricostruite durante la digitazione.
+  var PG_CONTEXT_WORDS = {
+    document: [
+      "getElementById", "getElementsByClassName", "getElementsByTagName",
+      "querySelector", "querySelectorAll",
+      "createElement", "createTextNode", "createDocumentFragment",
+      "addEventListener", "removeEventListener",
+      "body", "head", "documentElement", "title", "cookie",
+      "forms", "images", "links", "scripts"
+    ],
+
+    window: [
+      "document", "console", "localStorage", "sessionStorage",
+      "location", "history", "navigator", "innerWidth", "innerHeight",
+      "alert", "confirm", "prompt",
+      "setTimeout", "clearTimeout", "setInterval", "clearInterval",
+      "requestAnimationFrame", "cancelAnimationFrame",
+      "addEventListener", "removeEventListener"
+    ],
+
+    console: [
+      "log", "info", "warn", "error", "debug", "clear", "table",
+      "time", "timeEnd", "group", "groupEnd"
+    ],
+
+    React: [
+      "createElement", "cloneElement", "createContext",
+      "forwardRef", "memo", "lazy", "Fragment"
+    ],
+
+    ReactDOM: [
+      "createRoot", "hydrateRoot", "createPortal", "flushSync"
+    ],
+
+    // Alias comuni per elementi DOM e riferimenti React
+    element: [
+      "innerHTML", "outerHTML", "textContent", "innerText",
+      "value", "checked", "disabled", "className", "classList",
+      "style", "id", "title", "name", "dataset",
+      "getAttribute", "setAttribute", "removeAttribute",
+      "addEventListener", "removeEventListener",
+      "appendChild", "removeChild", "replaceChild",
+      "append", "prepend", "remove", "before", "after",
+      "closest", "matches", "contains",
+      "focus", "blur", "click"
+    ],
+
+    el: [
+      "innerHTML", "outerHTML", "textContent", "innerText",
+      "value", "checked", "disabled", "className", "classList",
+      "style", "id", "dataset",
+      "getAttribute", "setAttribute", "removeAttribute",
+      "addEventListener", "removeEventListener",
+      "appendChild", "removeChild", "append", "prepend",
+      "remove", "closest", "matches", "contains",
+      "focus", "blur", "click"
+    ],
+
+    node: [
+      "textContent", "nodeName", "nodeType", "parentNode",
+      "parentElement", "childNodes", "children",
+      "firstChild", "lastChild", "appendChild",
+      "removeChild", "replaceChild", "contains"
+    ]
+  };
+
+  /* ---- Ghost text inline (suggerimento grigio accanto al cursore) ---- */
+  var ghostWidget = null;   // elemento DOM del suggerimento
+  var ghostBookmark = null; // marker CodeMirror che tiene la posizione
+  var ghostSuffix = "";     // testo da inserire se si preme Tab
+
+  function clearGhost(){
+    if(ghostBookmark){ ghostBookmark.clear(); ghostBookmark = null; }
+    ghostWidget = null;
+    ghostSuffix = "";
+  }
+
+  // Trova la parola suggerita in base a quanto digitato
+  function findMatchingSuffix(candidates, typed){
+    for(var i = 0; i < candidates.length; i++){
+      var word = candidates[i];
+
+      if(word !== typed && word.indexOf(typed) === 0){
+        return word.slice(typed.length);
+      }
+    }
+
+    return null;
+  }
+
+// Trova la parola suggerita in base al testo digitato e al contesto
+  function findGhostSuffix(editor){
+    var cur = editor.getCursor();
+    var token = editor.getTokenAt(cur);
+    var typed = token.string.slice(0, cur.ch - token.start);
+
+    // Il suggerimento viene mostrato solo per identificatori validi
+    if(!/^[A-Za-z_$][\w$]*$/.test(typed)) return null;
+
+    var line = editor.getLine(cur.line);
+    var beforeCursor = line.slice(0, cur.ch);
+
+    // Riconosce contesti semplici come:
+    // document.ge
+    // window.set
+    // element.inn
+    // React.cre
+    var contextMatch = beforeCursor.match(
+            /(?:^|[^A-Za-z0-9_$])([A-Za-z_$][\w$]*)\.$/
+    );
+
+    if(contextMatch){
+      var contextWords = PG_CONTEXT_WORDS[contextMatch[1]];
+
+      if(contextWords){
+        return findMatchingSuffix(contextWords, typed);
+      }
+    }
+
+    // Fallback: parole predefinite + identificatori già presenti nel codice
+    var candidates = PG_BASE_WORDS.slice();
+    var text = editor.getValue();
+    var re = /[A-Za-z_$][\w$]*/g;
+    var match;
+    var seen = {};
+
+    candidates.forEach(function(word){
+      seen[word] = true;
+    });
+
+    while((match = re.exec(text))){
+      if(!seen[match[0]]){
+        seen[match[0]] = true;
+        candidates.push(match[0]);
+      }
+    }
+
+    return findMatchingSuffix(candidates, typed);
+  }
+
+  function showGhost(editor){
+    clearGhost();
+    if(editor.somethingSelected()) return;
+
+    var suffix = findGhostSuffix(editor);
+    if(!suffix) return;
+
+    ghostSuffix = suffix;
+    var span = document.createElement("span");
+    span.className = "pg-ghost-text";
+    span.textContent = suffix;
+    ghostWidget = span;
+
+    // ancora il widget alla posizione del cursore
+    ghostBookmark = editor.setBookmark(editor.getCursor(), {
+      widget: span,
+      insertLeft: false
+    });
+  }
+
+  function acceptGhost(editor){
+    if(!ghostSuffix) return CodeMirror.Pass;   // lascia agire il Tab normale
+    var suffix = ghostSuffix;
+    clearGhost();
+    editor.replaceSelection(suffix);
+    return true;
+  }
+
+  function initPlayground(){
+    cm = CodeMirror.fromTextArea(document.getElementById("pg-textarea"), {
+      mode: "jsx",
+      theme: "material-darker",
+      lineNumbers: true,
+      tabSize: 2,
+      indentUnit: 2,
+      autoCloseBrackets: true,
+      matchBrackets: true,
+      viewportMargin: Infinity,
+      extraKeys: {
+        "Tab": function(editor){ return acceptGhost(editor); },
+        "Right": function(editor){ return acceptGhost(editor); }
+      }
+    });
+    cm.setValue(state.playground.code || DEFAULT_PG_CODE);
+
+    // mostra il ghost text mentre si digita un identificatore
+    cm.on("inputRead", function(editor, change){
+      if(change.text && /[\w$]$/.test(change.text.join(""))){
+        showGhost(editor);
+      } else {
+        clearGhost();
+      }
+    });
+
+    // nascondi il ghost quando il cursore si muove o si clicca
+    cm.on("cursorActivity", function(editor){
+      // se il cursore non è più dove sta il ghost, puliscilo
+      if(ghostBookmark){
+        var pos = ghostBookmark.find();
+        var cur = editor.getCursor();
+        if(!pos || pos.line !== cur.line || pos.ch !== cur.ch){
+          clearGhost();
+        }
+      }
+    });
+
+    var debounceTimer = null;
+    cm.on("change", function(){
+      state.playground.code = cm.getValue();
+      state.playground.updatedAt = Date.now();
+      document.getElementById("pg-autosave").textContent = "modifiche non salvate...";
+      if(debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function(){
+        scheduleSync();
+        document.getElementById("pg-autosave").textContent = "salvato · " + new Date().toLocaleTimeString();
+      }, 900);
+    });
+  }
+
+  function buildIframeDoc(userCode){
+    return `<!DOCTYPE html><html><head><meta charset='utf-8'>
+              <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; connect-src https://cdnjs.cloudflare.com;">
+              <style>body{margin:0;font-family:sans-serif;color:#e6edf3;background:#0d1117;} #err-overlay{position:fixed;inset:0;background:#2a1214;color:#ff9b93;padding:16px;font-family:monospace;font-size:12px;white-space:pre-wrap;overflow:auto;display:none;}</style>
+              <script src='https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js'><\/script>
+          <script src='https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js'><\/script>
+          <script src='https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js'><\/script>
+          </head><body>
+      <div id='root'></div>
+      <div id='err-overlay'></div>
+      <script>
+      (function(){
+        function serialize(args){
+          return Array.prototype.map.call(args, function(a){
+            if(typeof a === 'string') return a;
+            try { return JSON.stringify(a); } catch(e){ return String(a); }
+          }).join(' ');
+        }
+        ['log','info','warn','error'].forEach(function(level){
+          var orig = console[level];
+          console[level] = function(){
+            parent.postMessage({ __pg: true, type: (level === 'error' || level === 'warn') ? 'error' : 'log', message: serialize(arguments) }, '*');
+            if(orig) orig.apply(console, arguments);
+          };
+        });
+      })();
+      <\/script>
+      <script>
+      window.onerror = function(msg, source, lineno, colno, error){
+        var detail = (error && error.stack) ? error.stack : msg;
+        showError(detail, lineno, colno);
+        return true;
+      };
+      window.addEventListener('unhandledrejection', function(ev){
+        var r = ev.reason;
+        showError('Promise non gestita: ' + ((r && r.stack) || r), null, null);
+      });
+      function showError(msg, lineno, colno){
+        var pos = (lineno != null) ? (' (riga ' + lineno + (colno != null ? ', col ' + colno : '') + ')') : '';
+        var o = document.getElementById('err-overlay');
+        o.style.display='block'; o.textContent = 'Errore' + pos + ':\\n' + msg;
+        parent.postMessage({ __pg: true, type: 'error', message: String(msg), line: lineno, col: colno }, '*');
+      }
+      <\/script>
+      <script>
+      (function(){
+        try {
+          var compiled = Babel.transform(
+            ${JSON.stringify(userCode)},
+            { presets: ['react'], filename: 'playground.jsx' }
+          ).code;
+          var fn = new Function(compiled);
+          fn();
+        } catch(e) {
+          var loc = (e.loc ? (' (riga ' + e.loc.line + ', col ' + e.loc.column + ')') : '');
+          showError((e.message || String(e)) + loc, e.loc && e.loc.line, e.loc && e.loc.column);
+        }
+      })();
+      <\/script>
+      </body></html>`;
+  }
+
+  function runPlayground(){
+    var code = cm.getValue();
+    document.getElementById("pg-iframe").srcdoc = buildIframeDoc(code);
+    document.getElementById("pg-console").classList.add("visible");
+    logToConsole("▶ Esecuzione avviata", false);
+  }
+
+  function resetPlayground(){
+    if(!confirm("Ripristinare il codice di default? Le modifiche correnti andranno perse.")) return;
+    cm.setValue(DEFAULT_PG_CODE);
+    state.playground.code = DEFAULT_PG_CODE;
+    scheduleSync();
+  }
+
+  function logToConsole(msg, isError){
+    var box = document.getElementById("pg-console");
+    var line = document.createElement("div");
+    line.className = "log-line" + (isError ? " error" : "");
+    line.textContent = msg;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  window.addEventListener("message", function(e){
+    var iframe = document.getElementById("pg-iframe");
+    if(e.source !== iframe.contentWindow) return;
+    var d = e.data;
+    if(!d || !d.__pg) return;
+    if(d.type === "error"){
+      var where = (d.line != null) ? (" [riga " + d.line + (d.col != null ? ", col " + d.col : "") + "]") : "";
+      logToConsole("✖ " + d.message + where, true);
+    } else if(d.type === "log"){
+      logToConsole(d.message, false);
+    }
+  });
+
+  document.getElementById("btn-run").addEventListener("click", runPlayground);
+  document.getElementById("btn-reset").addEventListener("click", resetPlayground);
+  document.getElementById("btn-toggle-console").addEventListener("click", function(){
+    var box = document.getElementById("pg-console");
+    var willShow = !box.classList.contains("visible");
+    box.classList.toggle("visible", willShow);
+    if(willShow) box.innerHTML = "";
+  });
+
+  /* =========================================================
+     SETTINGS MENU (dropdown) + EXPORT
+  ========================================================= */
+  function sanitizeFilename(name){
+    return (name || "file").replace(/[\/\\?%*:|"<>]/g, "-").trim() || "file";
+  }
+
+  function downloadBlob(blob, filename){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function exportCurrentFile(){
+    var file = getActiveFile();
+    if(!file){ alert("Nessun file aperto da esportare."); return; }
+    var blob = new Blob([file.content], { type: "text/markdown;charset=utf-8" });
+    downloadBlob(blob, sanitizeFilename(file.title) + ".md");
+  }
+
+  function exportAllFiles(){
+    if(!state.wiki.files.length){ alert("Non ci sono file da esportare."); return; }
+    if(typeof JSZip === "undefined"){ alert("Libreria di export non disponibile (controlla la connessione)."); return; }
+    var zip = new JSZip();
+    state.wiki.files.forEach(function(f){
+      var folder = sanitizeFilename(f.category || "Generale");
+      var name = sanitizeFilename(f.title) + ".md";
+      zip.folder(folder).file(name, f.content);
+    });
+    zip.generateAsync({ type: "blob" }).then(function(blob){
+      var stamp = new Date().toISOString().slice(0,10);
+      downloadBlob(blob, "learning-wiki-export-" + stamp + ".zip");
+    });
+  }
+
+  document.getElementById("btn-export-all").addEventListener("click", exportAllFiles);
+  document.getElementById("btn-export-current").addEventListener("click", exportCurrentFile);
+
+  /* =========================================================
+     SETTINGS MODAL
+  ========================================================= */
+  function openSettings(){
+    document.getElementById("input-github-token").value = "";
+    document.getElementById("input-gist-id").value = "";
+    var msg = document.getElementById("settings-status-msg");
+    if(lastSyncError){
+      msg.style.color = "var(--danger)";
+      msg.textContent = "Ultimo errore: " + lastSyncError;
+    } else {
+      msg.textContent = "";
+    }
+    document.getElementById("settings-modal").classList.add("visible");
+  }
+  function closeSettings(){ document.getElementById("settings-modal").classList.remove("visible"); }
+  document.getElementById("btn-close-settings").addEventListener("click", closeSettings);
+
+  document.getElementById("sync-status").addEventListener("click", openSettings);
+  document.getElementById("sync-status").addEventListener("keydown", function(e){
+    if(e.key === "Enter" || e.key === " "){
+      e.preventDefault();
+      openSettings();
+    }
+  });
+
+  document.getElementById("btn-save-settings").addEventListener("click", function(){
+    var msg = document.getElementById("settings-status-msg");
+    var tokenVal = document.getElementById("input-github-token").value.trim();
+    if(tokenVal && /^https?:\/\//i.test(tokenVal)){
+      msg.style.color = "var(--danger)";
+      msg.textContent = "Il campo Token contiene un URL, non un token. Incolla solo il token GitHub.";
+      return;
+    }
+    // Se il campo è vuoto ma un token è già salvato, mantieni quello esistente
+    if(tokenVal){
+      settings.githubToken = tokenVal;
+    } else if(!settings.githubToken){
+      msg.style.color = "var(--danger)";
+      msg.textContent = "Inserisci il GitHub Token.";
+      return;
+    }
+    var gistId = parseGistId(document.getElementById("input-gist-id").value);
+    if(!gistId){
+      msg.style.color = "var(--danger)";
+      msg.textContent = "Gist ID/URL non valido.";
+      return;
+    }
+    settings.gistId = gistId;
+    saveSettingsLocal();
+    msg.style.color = "var(--text-dim)";
+    msg.textContent = "Salvataggio... verifica connessione al Gist.";
+    pullFromRemote().then(function(ok){
+      if(ok){
+        msg.style.color = "var(--ok)";
+        msg.textContent = "Connesso! Dati caricati.";
+        setAdminMode(true);   // ← aggiunto: aggiorna badge e mostra controlli
+        renderSidebar();
+        if(cm) cm.setValue(state.playground.code || DEFAULT_PG_CODE);
+      } else {
+        msg.style.color = "var(--danger)";
+        msg.textContent = "Non riesco a leggere questo Gist. Controlla token/ID, oppure creane uno nuovo.";
+      }
+    });
+  });
+
+  document.getElementById("btn-init-bin").addEventListener("click", function(){
+    var tokenVal = document.getElementById("input-github-token").value.trim();
+    if(!tokenVal){
+      document.getElementById("settings-status-msg").style.color = "var(--danger)";
+      document.getElementById("settings-status-msg").textContent = "Inserisci prima il GitHub Token.";
+      return;
+    }
+    settings.githubToken = tokenVal;
+    saveSettingsLocal();
+    var msg = document.getElementById("settings-status-msg");
+    msg.style.color = "var(--text-dim)";
+    msg.textContent = "Creazione nuovo Gist in corso...";
+    createRemoteItem().then(function(ok){
+      if(ok){
+        document.getElementById("input-gist-id").value = settings.gistId;
+        msg.style.color = "var(--ok)";
+        msg.textContent = "Gist creato e collegato con lo stato corrente!";
+      } else {
+        msg.style.color = "var(--danger)";
+        msg.textContent = "Errore durante la creazione del Gist. Il token ha lo scope \"gist\"?";
+      }
+    });
+  });
+
+  /* =========================================================
+     INIT
+  ========================================================= */
+  function init(){
+    loadSettings();
+    loadCache();
+
+    // Se non c'è un gistId salvato, usa quello pubblico hardcodato
+    if(!settings.gistId && PUBLIC_GIST_ID) settings.gistId = PUBLIC_GIST_ID;
+
+    isAdminMode = detectAdminMode();
+    setAdminMode(isAdminMode);   // applica subito le classi CSS
+
+    renderSidebar();
+    if(state.wiki.files.length === 0) closeFilePanel();
+    initPlayground();
+
+    if(localStorage.getItem(LS_SIDEBAR) === "1" && !isMobileViewport()){
+      document.getElementById("wiki-sidebar").classList.add("collapsed");
+    }
+
+    if(isAdminMode && isConfigured()){
+      // admin con token → pull autenticato (come prima)
+      pullFromRemote().then(function(){
+        renderSidebar();
+        if(cm) cm.setValue(state.playground.code || DEFAULT_PG_CODE);
+      });
+      refreshSyncStatusIdle();
+    } else if(PUBLIC_GIST_ID){
+      // viewer → pull pubblico senza token, NON apre il modal
+      pullPublic().then(function(){
+        renderSidebar();
+        if(cm) cm.setValue(state.playground.code || DEFAULT_PG_CODE);
+      });
+    } else {
+      // nessun gist configurato → apri settings (comportamento precedente)
+      refreshSyncStatusIdle();
+      setTimeout(openSettings, 400);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+})();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+</body>
+</html>

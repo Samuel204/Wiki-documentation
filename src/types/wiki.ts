@@ -1,0 +1,31 @@
+export interface WikiFile {
+    id: string
+    title: string
+    category: string
+    content: string
+    updatedAt: number
+    recentlyOpenedAt?: number
+}
+
+export interface WikiState {
+    categories: string[]
+    files: WikiFile[]
+}
+
+export interface PlaygroundState {
+    code: string
+    updatedAt: number
+}
+
+export interface AppState {
+    wiki: WikiState
+    playground: PlaygroundState
+}
+
+export interface GithubSettings {
+    githubToken: string
+    gistId: string
+}
+
+export type AppMode = 'viewer' | 'admin'
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error'
