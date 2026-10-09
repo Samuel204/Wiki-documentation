@@ -1,51 +1,79 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+// src/hooks/useWikiState.ts
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppState, WikiFile } from '../types/wiki'
 import { loadCache, saveCache } from '../lib/storage'
 
-export const DEFAULT_PLAYGROUND_CODE = `const { useState } = React;
+const CACHE_DEBOUNCE_MS = 400
+const DEFAULT_CATEGORY = 'Generale'
 
-function App() {
-  const [count, setCount] = useState(0);
-
-  return (
-    <div style={{ padding: 24, fontFamily: 'sans-serif' }}>
-      <h2>Playground React</h2>
-      <p>Count: {count}</p>
-      <button onClick={() => setCount((value) => value + 1)}>
-        Incrementa
-      </button>
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);`
+export const DEFAULT_PLAYGROUND_CODE = [
+    'const { useState, useEffect, useRef, useMemo, useCallback } = React;',
+    '',
+    'function App() {',
+    '  const [count, setCount] = useState(0);',
+    '  const renders = useRef(0);',
+    '  renders.current++;',
+    '',
+    '  useEffect(() => {',
+    "    console.log('Count cambiato:', count);",
+    '  }, [count]);',
+    '',
+    '  const doubled = useMemo(() => count * 2, [count]);',
+    '  const increment = useCallback(() => setCount(c => c + 1), []);',
+    '',
+    '  return (',
+    "    <div style={{ fontFamily: 'sans-serif', padding: 24, color: '#e6edf3' }}>",
+    '      <h2>Playground pronto️</h2>',
+    '      <p>Count: {count} (doppio: {doubled})</p>',
+    "      <button onClick={increment} style={{ padding: '8px 14px', cursor: 'pointer' }}>+1</button>",
+    "      <p style={{ marginTop: 12, fontSize: 12, color: '#8b96a3' }}>Render #{renders.current}</p>",
+    '    </div>',
+    '  );',
+    '}',
+    '',
+    "ReactDOM.createRoot(document.getElementById('root')).render(<App />);",
+    '',
+].join('\n')
 
 const initialState: AppState = {
-    wiki: {
-        categories: ['Generale'],
-        files: [],
-    },
-    playground: {
-        code: DEFAULT_PLAYGROUND_CODE,
-        updatedAt: 0,
-    },
+    wiki: { categories: [DEFAULT_CATEGORY], files: [] },
+    playground: { code: DEFAULT_PLAYGROUND_CODE, updatedAt: 0 },
 }
 
 function createId(): string {
-    return `${Date.now().toString(36)}-${Math.random()
-        .toString(36)
-        .slice(2, 9)}`
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+}
+
+function safeSaveCache(state: AppState): void {
+    try {
+        saveCache(state)
+    } catch (err) {
+        // QuotaExceededError o storage disabilitato: i dati restano in memoria.
+        console.warn('Salvataggio cache non riuscito:', err)
+    }
 }
 
 export function useWikiState() {
-    const [state, setState] = useState<AppState>(() =>
-        loadCache(initialState),
-    )
+    const [state, setState] = useState<AppState>(() => loadCache(initialState))
     const [activeFileId, setActiveFileIdState] = useState<string | null>(null)
+    const stateRef = useRef(state)
 
+    // Cache locale con debounce (come la versione legacy).
     useEffect(() => {
-        saveCache(state)
+        stateRef.current = state
+        const timer = window.setTimeout(() => safeSaveCache(state), CACHE_DEBOUNCE_MS)
+        return () => window.clearTimeout(timer)
     }, [state])
+
+    // Flush alla chiusura della pagina e allo smontaggio.
+    useEffect(() => {
+        const flush = () => safeSaveCache(stateRef.current)
+        window.addEventListener('pagehide', flush)
+        return () => {
+            window.removeEventListener('pagehide', flush)
+            flush()
+        }
+    }, [])
 
     const files = state.wiki.files
     const categories = state.wiki.categories
@@ -57,41 +85,32 @@ export function useWikiState() {
 
     const setActiveFileId = useCallback((id: string | null) => {
         setActiveFileIdState(id)
-
         if (!id) {
             return
         }
-
         setState((current) => ({
             ...current,
             wiki: {
                 ...current.wiki,
                 files: current.wiki.files.map((file) =>
-                    file.id === id
-                        ? { ...file, recentlyOpenedAt: Date.now() }
-                        : file,
+                    file.id === id ? { ...file, recentlyOpenedAt: Date.now() } : file,
                 ),
             },
         }))
     }, [])
 
     const updateFile = useCallback(
-        (updates: Partial<WikiFile>) => {
+        (updates: Partial<Omit<WikiFile, 'id'>>) => {
             if (!activeFileId) {
                 return
             }
-
             setState((current) => ({
                 ...current,
                 wiki: {
                     ...current.wiki,
                     files: current.wiki.files.map((file) =>
                         file.id === activeFileId
-                            ? {
-                                ...file,
-                                ...updates,
-                                updatedAt: Date.now(),
-                            }
+                            ? { ...file, ...updates, updatedAt: Date.now() }
                             : file,
                     ),
                 },
@@ -100,105 +119,73 @@ export function useWikiState() {
         [activeFileId],
     )
 
-    const addFile = useCallback(
-        (title: string, content: string, category?: string) => {
-            const targetCategory =
-                category || categories[0] || 'Generale'
-
-            setState((current) => {
-                const nextCategories = current.wiki.categories.includes(targetCategory)
-                    ? current.wiki.categories
-                    : [...current.wiki.categories, targetCategory]
-
-                const file: WikiFile = {
-                    id: createId(),
-                    title,
-                    content,
-                    category: targetCategory,
-                    updatedAt: Date.now(),
-                }
-
-                return {
-                    ...current,
-                    wiki: {
-                        categories: nextCategories,
-                        files: [...current.wiki.files, file],
-                    },
-                }
-            })
-        },
-        [categories],
-    )
-
-    const createCategory = useCallback((name: string) => {
-        const normalizedName = name.trim()
-
-        if (!normalizedName) {
-            return
-        }
+    /** Aggiunge un file e ne restituisce l'id (non lo apre). */
+    const addFile = useCallback((title: string, content: string, category?: string): string => {
+        const id = createId()
 
         setState((current) => {
-            if (current.wiki.categories.includes(normalizedName)) {
-                return current
-            }
+            const target = category || current.wiki.categories[0] || DEFAULT_CATEGORY
+            const nextCategories = current.wiki.categories.includes(target)
+                ? current.wiki.categories
+                : [...current.wiki.categories, target]
+
+            const file: WikiFile = { id, title, content, category: target, updatedAt: Date.now() }
 
             return {
                 ...current,
-                wiki: {
-                    ...current.wiki,
-                    categories: [...current.wiki.categories, normalizedName],
-                },
+                wiki: { categories: nextCategories, files: [...current.wiki.files, file] },
             }
         })
+
+        return id
     }, [])
 
-    const deleteCategory = useCallback(
-        (category: string) => {
-            setState((current) => ({
-                ...current,
-                wiki: {
-                    categories: current.wiki.categories.filter(
-                        (item) => item !== category,
-                    ),
-                    files: current.wiki.files.filter(
-                        (file) => file.category !== category,
-                    ),
+    const createCategory = useCallback((name: string) => {
+        const normalized = name.trim()
+        if (!normalized) {
+            return
+        }
+        setState((current) =>
+            current.wiki.categories.includes(normalized)
+                ? current
+                : {
+                    ...current,
+                    wiki: { ...current.wiki, categories: [...current.wiki.categories, normalized] },
                 },
-            }))
+        )
+    }, [])
 
-            if (activeFile?.category === category) {
-                setActiveFileId(null)
-            }
-        },
-        [activeFile?.category],
-    )
+    const deleteCategory = useCallback((category: string) => {
+        setState((current) => ({
+            ...current,
+            wiki: {
+                categories: current.wiki.categories.filter((item) => item !== category),
+                files: current.wiki.files.filter((file) => file.category !== category),
+            },
+        }))
+
+        setActiveFileIdState((id) => {
+            const file = id ? stateRef.current.wiki.files.find((item) => item.id === id) : null
+            return file?.category === category ? null : id
+        })
+    }, [])
 
     const deleteFile = useCallback(() => {
         if (!activeFileId) {
             return
         }
-
         setState((current) => ({
             ...current,
             wiki: {
                 ...current.wiki,
-                files: current.wiki.files.filter(
-                    (file) => file.id !== activeFileId,
-                ),
+                files: current.wiki.files.filter((file) => file.id !== activeFileId),
             },
         }))
-
-        setActiveFileId(null)
+        setActiveFileIdState(null)
     }, [activeFileId])
 
     const updatePlayground = useCallback((code: string) => {
-        setState((current) => ({
-            ...current,
-            playground: {
-                code,
-                updatedAt: Date.now(),
-            },
-        }))
+        setState((current) => ({ ...current, playground: { code, updatedAt: Date.now() } }))
     }, [])
 
     const applyRemoteData = useCallback(

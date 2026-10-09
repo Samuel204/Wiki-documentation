@@ -6,6 +6,8 @@ interface SidebarProps {
     activeFileId: string | null
     search: string
     collapsed: boolean
+    mobileOpen: boolean
+    searching: boolean
     adminMode: boolean
     collapsedCategories: Record<string, boolean>
     onToggleCategory: (category: string) => void
@@ -117,6 +119,8 @@ export function Sidebar({
                             activeFileId,
                             search,
                             collapsed,
+                            mobileOpen,
+                            searching,
                             adminMode,
                             collapsedCategories,
                             onToggleCategory,
@@ -137,7 +141,9 @@ export function Sidebar({
         .slice(0, 2)
 
     return (
-        <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
+        <aside
+            className={`sidebar ${collapsed ? 'collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`}
+        >
             <div className="sidebar-header">
                 <strong>
                     <BookIcon />
@@ -197,7 +203,15 @@ export function Sidebar({
                     const categoryFiles = files.filter(
                         (file) => file.category === category,
                     )
-                    const isCollapsed = collapsedCategories[category] ?? true
+
+                    // In ricerca: nasconde le categorie vuote e apre le altre.
+                    if (searching && categoryFiles.length === 0) {
+                        return null
+                    }
+
+                    const isCollapsed = searching
+                        ? false
+                        : (collapsedCategories[category] ?? true)
 
                     return (
                         <section className="category-block" key={category}>
@@ -266,6 +280,9 @@ export function Sidebar({
                         </section>
                     )
                 })}
+                {searching && files.length === 0 && (
+                    <div className="sidebar-empty">Nessun file trovato</div>
+                )}
             </div>
 
             {adminMode && (

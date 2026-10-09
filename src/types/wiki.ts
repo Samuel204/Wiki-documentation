@@ -29,3 +29,11 @@ export interface GithubSettings {
 
 export type AppMode = 'viewer' | 'admin'
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error'
+
+/** Stato mostrato nell'indicatore della TopBar. */
+export interface SyncInfo {
+    status: SyncStatus
+    text: string
+    /** Dettaglio mostrato nel tooltip (es. messaggio d'errore). */
+    detail?: string
+}

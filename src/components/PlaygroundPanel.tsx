@@ -6,6 +6,7 @@ import {
     useLayoutEffect,
     useRef,
     useState,
+    type CSSProperties,
     type PointerEvent as ReactPointerEvent,
     type Ref,
 } from 'react'
@@ -28,6 +29,7 @@ interface PlaygroundPanelProps {
     code: string
     onChange: (code: string) => void
     className?: string
+    style?: CSSProperties
     ref?: Ref<PlaygroundPanelHandle>
 }
 
@@ -72,7 +74,7 @@ function loadSplitHeight(): number | null {
     }
 }
 
-export function PlaygroundPanel({ code, onChange, className, ref }: PlaygroundPanelProps) {
+export function PlaygroundPanel({ code, onChange, className, style, ref }: PlaygroundPanelProps) {
     const [srcDoc, setSrcDoc] = useState(() => buildPreviewDocument(code))
     const [runId, setRunId] = useState(0)
     const [consoleVisible, setConsoleVisible] = useState(false)
@@ -277,7 +279,7 @@ export function PlaygroundPanel({ code, onChange, className, ref }: PlaygroundPa
         .join(' ')
 
     return (
-        <section className={panelClassName}>
+        <section className={panelClassName} style={style}>
             <header className="playground-toolbar">
                 <button className="pg-btn accent" type="button" onClick={() => run()} title="Esegui (Ctrl+Invio)">
                     <RunIcon />
