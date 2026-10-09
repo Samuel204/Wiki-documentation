@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { DocumentPanel } from './components/DocumentPanel'
-import { PlaygroundPanel } from './components/PlaygroundPanel.tsx'
+import {PlaygroundPanel, type PlaygroundPanelHandle} from './components/PlaygroundPanel.tsx'
 import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
 import { SettingsModal } from './components/modals/SettingsModal'
@@ -18,6 +18,8 @@ export default function App() {
         Record<string, boolean>
     >({})
     const uploadInputRef = useRef<HTMLInputElement>(null)
+    const playgroundRef = useRef<PlaygroundPanelHandle>(null)
+
 
     const {
         state,
@@ -187,10 +189,11 @@ export default function App() {
                     adminMode={mode === 'admin'}
                     onUpdate={updateFile}
                     onDelete={deleteFile}
-                    onOpenInPlayground={updatePlayground}
+                    onOpenInPlayground={(code) => playgroundRef.current?.loadCode(code)}
                 />
 
                 <PlaygroundPanel
+                    ref={playgroundRef}
                     code={state.playground.code}
                     onChange={updatePlayground}
                 />

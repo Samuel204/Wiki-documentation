@@ -1,10 +1,34 @@
-import {useEffect, useRef, useState} from 'react'
-import {DEFAULT_PLAYGROUND_CODE} from "../hooks/useWikiState.ts";
+
+import {
+    useCallback,
+    useEffect,
+    useImperativeHandle,
+    useLayoutEffect,
+    useRef,
+    useState,
+    type PointerEvent as ReactPointerEvent,
+    type Ref,
+} from 'react'
+import { DEFAULT_PLAYGROUND_CODE } from '../hooks/useWikiState.ts'
+import { CodeEditor, type CodeEditorHandle } from './playground/CodeEditor'
+import { buildPreviewDocument, isPlaygroundMessage } from '../lib/playgroundPreview'
+
+const SAVE_DEBOUNCE_MS = 900
+const FLASH_MS = 700
+const SPLIT_MIN_HEIGHT = 110
+const LS_PG_SPLIT = 'lw_pg_split_v1'
+
+export interface PlaygroundPanelHandle {
+    /** Carica un esempio, lo esegue ed evidenzia il pannello. */
+    loadCode: (code: string) => void
+    run: () => void
+}
 
 interface PlaygroundPanelProps {
     code: string
-    savedLabel?: string
     onChange: (code: string) => void
+    className?: string
+    ref?: Ref<PlaygroundPanelHandle>
 }
 
 interface ConsoleEntry {
@@ -39,147 +63,223 @@ function ConsoleIcon() {
     )
 }
 
-function buildPreviewDocument(code: string): string {
-    return `<!doctype html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; style-src 'unsafe-inline';"
-    />
-    <style>
-      body {
-        margin: 0;
-        padding: 16px;
-        color: #e6edf3;
-        background: #0d1117;
-        font-family: sans-serif;
-      }
-      #error {
-        color: #ff7b72;
-        white-space: pre-wrap;
-      }
-    </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <pre id="error"></pre>
-
-    <script>
-      (function () {
-        function serialize(args) {
-          return Array.prototype.map.call(args, function (value) {
-            if (typeof value === 'string') return value;
-            try { return JSON.stringify(value); } catch (e) { return String(value); }
-          }).join(' ');
-        }
-        ['log', 'info', 'warn', 'error'].forEach(function (level) {
-          var original = console[level];
-          console[level] = function () {
-            parent.postMessage({
-              __pg: true,
-              type: (level === 'error' || level === 'warn') ? 'error' : 'log',
-              message: serialize(arguments),
-            }, '*');
-            if (original) original.apply(console, arguments);
-          };
-        });
-      })();
-
-      window.onerror = function(message, source, line, column, error) {
-        const detail = error && error.stack
-          ? error.stack
-          : String(message) + ' (' + line + ':' + column + ')';
-        document.getElementById('error').textContent = detail;
-        parent.postMessage({ __pg: true, type: 'error', message: detail }, '*');
-      };
-    </script>
-
-    <script>
-      try {
-        const compiled = Babel.transform(
-          ${JSON.stringify(code)},
-          { presets: ['react'] }
-        ).code;
-
-        new Function(compiled)();
-      } catch (error) {
-        const detail = error && error.stack ? error.stack : String(error);
-        document.getElementById('error').textContent = detail;
-        parent.postMessage({ __pg: true, type: 'error', message: detail }, '*');
-      }
-    </script>
-  </body>
-</html>`
+function loadSplitHeight(): number | null {
+    try {
+        const value = Number(localStorage.getItem(LS_PG_SPLIT))
+        return Number.isFinite(value) && value > 0 ? value : null
+    } catch {
+        return null
+    }
 }
 
-export function PlaygroundPanel({
-                                    code,
-                                    savedLabel,
-                                    onChange,
-                                }: PlaygroundPanelProps) {
-    const [preview, setPreview] = useState('')
+export function PlaygroundPanel({ code, onChange, className, ref }: PlaygroundPanelProps) {
+    const [srcDoc, setSrcDoc] = useState(() => buildPreviewDocument(code))
+    const [runId, setRunId] = useState(0)
     const [consoleVisible, setConsoleVisible] = useState(false)
     const [logs, setLogs] = useState<ConsoleEntry[]>([])
-    const iframeRef = useRef<HTMLIFrameElement>(null)
-    const logIdRef = useRef(0)
+    const [savedLabel, setSavedLabel] = useState('—')
+    const [flashing, setFlashing] = useState(false)
+    const [editorHeight, setEditorHeight] = useState<number | null>(loadSplitHeight)
+    const [draggingSplit, setDraggingSplit] = useState(false)
 
+    const editorRef = useRef<CodeEditorHandle>(null)
+    const iframeRef = useRef<HTMLIFrameElement>(null)
+    const splitRef = useRef<HTMLDivElement>(null)
+    const consoleRef = useRef<HTMLDivElement>(null)
+    const logIdRef = useRef(0)
+    const onChangeRef = useRef(onChange)
+    const lastEmittedRef = useRef(code)
+    const pendingCodeRef = useRef<string | null>(null)
+    const saveTimerRef = useRef<number | null>(null)
+    const flashTimerRef = useRef<number | null>(null)
+
+    useLayoutEffect(() => {
+        onChangeRef.current = onChange
+    })
+
+    /* ---------- Salvataggio con debounce ---------- */
+    const emit = useCallback((value: string) => {
+        lastEmittedRef.current = value
+        onChangeRef.current(value)
+        setSavedLabel(`salvato · ${new Date().toLocaleTimeString()}`)
+    }, [])
+
+    const cancelPendingSave = useCallback(() => {
+        if (saveTimerRef.current !== null) {
+            window.clearTimeout(saveTimerRef.current)
+            saveTimerRef.current = null
+        }
+        pendingCodeRef.current = null
+    }, [])
+
+    const flushPendingSave = useCallback(() => {
+        const pending = pendingCodeRef.current
+        cancelPendingSave()
+        if (pending !== null) {
+            emit(pending)
+        }
+    }, [cancelPendingSave, emit])
+
+    const handleEditorChange = useCallback(
+        (value: string, origin: string | undefined) => {
+            // Le sostituzioni programmatiche vengono già gestite da chi le esegue.
+            if (origin === 'setValue') {
+                return
+            }
+            pendingCodeRef.current = value
+            setSavedLabel('modifiche non salvate...')
+            if (saveTimerRef.current !== null) {
+                window.clearTimeout(saveTimerRef.current)
+            }
+            saveTimerRef.current = window.setTimeout(flushPendingSave, SAVE_DEBOUNCE_MS)
+        },
+        [flushPendingSave],
+    )
+
+    // Non perde modifiche alla chiusura della pagina o allo smontaggio.
     useEffect(() => {
-        setPreview(buildPreviewDocument(code))
-    }, [code])
+        window.addEventListener('pagehide', flushPendingSave)
+        return () => {
+            window.removeEventListener('pagehide', flushPendingSave)
+            flushPendingSave()
+        }
+    }, [flushPendingSave])
+
+    // Codice cambiato dall'esterno (es. pull dal Gist) → aggiorna l'editor.
+    useEffect(() => {
+        if (code === lastEmittedRef.current) {
+            return
+        }
+        lastEmittedRef.current = code
+        cancelPendingSave()
+        editorRef.current?.setValue(code)
+    }, [code, cancelPendingSave])
+
+    /* ---------- Esecuzione e console ---------- */
+    const appendLog = useCallback((type: ConsoleEntry['type'], message: string) => {
+        logIdRef.current += 1
+        const id = logIdRef.current
+        setLogs((current) => [...current, { id, type, message }])
+    }, [])
+
+    const run = useCallback(
+        (source?: string) => {
+            const value = source ?? editorRef.current?.getValue() ?? ''
+            setSrcDoc(buildPreviewDocument(value))
+            setRunId((n) => n + 1) // forza il reload anche con codice identico
+            logIdRef.current += 1
+            setLogs([{ id: logIdRef.current, type: 'log', message: '▶ Esecuzione avviata' }])
+            setConsoleVisible(true)
+        },
+        [],
+    )
 
     useEffect(() => {
         function handleMessage(event: MessageEvent) {
             const iframe = iframeRef.current
-            if (!iframe || event.source !== iframe.contentWindow) {
+            if (!iframe || event.source !== iframe.contentWindow || !isPlaygroundMessage(event.data)) {
                 return
             }
-
-            const data = event.data as
-                | { __pg?: boolean; type?: string; message?: string }
-                | undefined
-
-            if (!data || !data.__pg) {
-                return
+            const { type, message, line, col } = event.data
+            if (type === 'error') {
+                const where = line != null ? ` [riga ${line}${col != null ? `, col ${col}` : ''}]` : ''
+                appendLog('error', `✖ ${message}${where}`)
+            } else {
+                appendLog('log', message)
             }
-
-            logIdRef.current += 1
-            setLogs((current) => [
-                ...current,
-                {
-                    id: logIdRef.current,
-                    type: data.type === 'error' ? 'error' : 'log',
-                    message: data.message ?? '',
-                },
-            ])
-            setConsoleVisible(true)
         }
 
         window.addEventListener('message', handleMessage)
         return () => window.removeEventListener('message', handleMessage)
-    }, [])
+    }, [appendLog])
 
-    function runCode() {
-        setLogs([])
-        setPreview(buildPreviewDocument(code))
-    }
+    // Autoscroll della console.
+    useEffect(() => {
+        const box = consoleRef.current
+        if (box) {
+            box.scrollTop = box.scrollHeight
+        }
+    }, [logs, consoleVisible])
 
     function resetCode() {
-        if (window.confirm('Ripristinare il codice del playground?')) {
-            onChange(DEFAULT_PLAYGROUND_CODE)
-            setLogs([])
-            setPreview(buildPreviewDocument(DEFAULT_PLAYGROUND_CODE))
+        if (!window.confirm('Ripristinare il codice di default? Le modifiche correnti andranno perse.')) {
+            return
+        }
+        cancelPendingSave()
+        editorRef.current?.setValue(DEFAULT_PLAYGROUND_CODE)
+        emit(DEFAULT_PLAYGROUND_CODE)
+        run(DEFAULT_PLAYGROUND_CODE)
+    }
+
+    /* ---------- API imperativa (Apri nel Playground) ---------- */
+    useEffect(
+        () => () => {
+            if (flashTimerRef.current !== null) {
+                window.clearTimeout(flashTimerRef.current)
+            }
+        },
+        [],
+    )
+
+    useImperativeHandle(
+        ref,
+        () => ({
+            loadCode: (value: string) => {
+                cancelPendingSave()
+                editorRef.current?.setValue(value)
+                emit(value)
+                run(value)
+                setFlashing(true)
+                if (flashTimerRef.current !== null) {
+                    window.clearTimeout(flashTimerRef.current)
+                }
+                flashTimerRef.current = window.setTimeout(() => setFlashing(false), FLASH_MS)
+            },
+            run: () => run(),
+        }),
+        [cancelPendingSave, emit, run],
+    )
+
+    /* ---------- Split resizer editor / preview ---------- */
+    function handleSplitPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+        event.preventDefault()
+        event.currentTarget.setPointerCapture(event.pointerId)
+        setDraggingSplit(true)
+    }
+
+    function handleSplitPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+        const split = splitRef.current
+        if (!draggingSplit || !split) {
+            return
+        }
+        const rect = split.getBoundingClientRect()
+        const max = rect.height - event.currentTarget.offsetHeight - SPLIT_MIN_HEIGHT
+        const next = Math.max(SPLIT_MIN_HEIGHT, Math.min(event.clientY - rect.top, max))
+        setEditorHeight(next)
+    }
+
+    function stopSplitDrag() {
+        if (!draggingSplit) {
+            return
+        }
+        setDraggingSplit(false)
+        if (editorHeight !== null) {
+            try {
+                localStorage.setItem(LS_PG_SPLIT, String(Math.round(editorHeight)))
+            } catch {
+                // localStorage non disponibile: il layout resta solo in memoria.
+            }
         }
     }
 
+    const panelClassName = ['playground-panel', flashing ? 'flash' : '', className ?? '']
+        .filter(Boolean)
+        .join(' ')
+
     return (
-        <section className="playground-panel">
+        <section className={panelClassName}>
             <header className="playground-toolbar">
-                <button className="pg-btn accent" type="button" onClick={runCode}>
+                <button className="pg-btn accent" type="button" onClick={() => run()} title="Esegui (Ctrl+Invio)">
                     <RunIcon />
                     Run
                 </button>
@@ -190,8 +290,9 @@ export function PlaygroundPanel({
                 </button>
 
                 <button
-                    className="pg-btn"
+                    className={`pg-btn ${consoleVisible ? 'active' : ''}`}
                     type="button"
+                    aria-pressed={consoleVisible}
                     onClick={() => setConsoleVisible((value) => !value)}
                 >
                     <ConsoleIcon />
@@ -200,45 +301,61 @@ export function PlaygroundPanel({
 
                 <div className="playground-spacer" />
 
-                <span className="pg-autosave">{savedLabel ?? '—'}</span>
+                <span className="pg-autosave">{savedLabel}</span>
             </header>
 
-            <div className="playground-split">
-                <div className="playground-editor-wrap">
+            <div className="playground-split" ref={splitRef}>
+                <div
+                    className="playground-editor-wrap"
+                    style={editorHeight !== null ? { flex: `0 0 ${editorHeight}px` } : undefined}
+                >
                     <span className="panel-label">EDITOR</span>
-                    <textarea
-                        className="playground-editor"
-                        value={code}
-                        spellCheck={false}
-                        onChange={(event) => onChange(event.target.value)}
+                    <CodeEditor
+                        ref={editorRef}
+                        initialValue={code}
+                        onChange={handleEditorChange}
+                        onRun={() => run()}
                     />
                 </div>
+
+                <div
+                    className={`playground-split-resizer ${draggingSplit ? 'dragging' : ''}`}
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label="Ridimensiona editor e anteprima"
+                    onPointerDown={handleSplitPointerDown}
+                    onPointerMove={handleSplitPointerMove}
+                    onPointerUp={stopSplitDrag}
+                    onPointerCancel={stopSplitDrag}
+                    onDoubleClick={() => {
+                        setEditorHeight(null)
+                        localStorage.removeItem(LS_PG_SPLIT)
+                    }}
+                />
 
                 <div className="playground-preview-wrap">
                     <span className="panel-label">PREVIEW</span>
                     <iframe
+                        key={runId}
                         ref={iframeRef}
                         className="playground-preview"
                         title="Anteprima playground"
                         sandbox="allow-scripts"
-                        srcDoc={preview}
+                        srcDoc={srcDoc}
+                        style={draggingSplit ? { pointerEvents: 'none' } : undefined}
                     />
                 </div>
             </div>
 
             {consoleVisible && (
-                <div className="playground-console">
+                <div className="playground-console" ref={consoleRef}>
                     {logs.length === 0 ? (
                         <div className="log-line log-empty">
                             Nessun output. Premi “Run” per eseguire il codice.
                         </div>
                     ) : (
                         logs.map((entry) => (
-                            <div
-                                key={entry.id}
-                                className={`log-line ${entry.type === 'error' ? 'error' : ''}`}
-                            >
-                                {entry.type === 'error' ? '✖ ' : ''}
+                            <div key={entry.id} className={`log-line ${entry.type === 'error' ? 'error' : ''}`}>
                                 {entry.message}
                             </div>
                         ))

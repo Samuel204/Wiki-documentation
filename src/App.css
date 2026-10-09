@@ -788,7 +788,101 @@
   display: flex;
   flex-direction: column;
   min-height: 80px;
-  border-bottom: 1px solid var(--pg-border);
+  max-height: calc(100% - 92px);
+}
+
+/* ---- CodeMirror ---- */
+.playground-editor-host {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.playground-editor-host .CodeMirror {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.pg-ghost-text {
+  color: #5c6773;
+  opacity: 0.75;
+  font-style: normal;
+  pointer-events: none;
+}
+
+/* ---- Split resizer editor/preview ---- */
+.playground-split-resizer {
+  position: relative;
+  flex-shrink: 0;
+  height: 12px;
+  cursor: row-resize;
+  touch-action: none;
+  background: var(--pg-bg-elevated);
+}
+
+.playground-split-resizer::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.playground-split-resizer::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28px;
+  height: 2px;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  background: var(--pg-text-faint);
+}
+
+.playground-split-resizer:hover::before,
+.playground-split-resizer.dragging::before {
+  background: var(--play-accent);
+}
+
+/* ---- Console ---- */
+.playground-console .log-line {
+  padding: 2px 0;
+  border-bottom: 1px solid #1c232b;
+  color: #c9d1d9;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.playground-console .log-line.error {
+  color: #ff7b72;
+}
+
+.playground-console .log-empty {
+  color: var(--pg-text-faint);
+  border-bottom: 0;
+}
+
+.playground-panel .pg-btn.active {
+  color: var(--pg-text);
+  border-color: var(--pg-text-faint);
+}
+
+/* ---- Flash "Apri nel Playground" ---- */
+.playground-panel {
+  transition: box-shadow 0.2s ease;
+}
+
+.playground-panel.flash {
+  box-shadow: inset 0 0 0 2px var(--play-accent), var(--shadow);
 }
 
 .playground-preview-wrap {
