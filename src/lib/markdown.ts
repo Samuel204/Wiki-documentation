@@ -1,4 +1,3 @@
-// src/lib/markdown.ts
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
@@ -55,7 +54,9 @@ export function renderMarkdown(markdown: string): RenderedMarkdown {
     renderer.code = ({ text, lang }) => {
         // "jsx title=App" → "jsx"
         const language = (lang ?? '').trim().split(/\s+/)[0].toLowerCase()
-        const highlighted = highlight(text, language)
+        // marked 18 può lasciare il "\n" finale: genererebbe una riga vuota numerata.
+        const code = text.replace(/\n+$/, '')
+        const highlighted = highlight(code, language)
         const langClass = language ? ` class="language-${escapeHtml(language)}"` : ''
 
         if (!RUNNABLE_LANGS.has(language)) {
@@ -67,7 +68,7 @@ export function renderMarkdown(markdown: string): RenderedMarkdown {
             .map((line) => `<span class="code-line">${line || '&nbsp;'}</span>`)
             .join('')
 
-        const index = examples.push({ code: text, lang: language }) - 1
+        const index = examples.push({ code, lang: language }) - 1
 
         return (
             `<div class="code-example-wrap">` +

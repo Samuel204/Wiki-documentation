@@ -3,7 +3,7 @@ import type { WikiFile } from '../types/wiki'
 function sanitizeFilename(value: string): string {
     return (
         value
-            .replace(/[\/\\?%*:|"<>]/g, '-')
+            .replace(/[/\\?%*:|"<>]/g, '-')
             .trim()
             .replace(/\s+/g, '-') || 'file'
     )
