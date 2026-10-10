@@ -12,9 +12,16 @@ export interface WikiState {
     files: WikiFile[]
 }
 
+export interface PlaygroundExtraFile {
+    id: string
+    name: string
+    code: string
+}
+
 export interface PlaygroundState {
     code: string
     updatedAt: number
+    extraFiles?: PlaygroundExtraFile[]
 }
 
 export interface AppState {

@@ -1,7 +1,7 @@
-// src/hooks/useWikiState.ts
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AppState, WikiFile } from '../types/wiki'
+import type { AppState, PlaygroundExtraFile, WikiFile } from '../types/wiki'
 import { loadCache, saveCache } from '../lib/storage'
+
 
 const CACHE_DEBOUNCE_MS = 400
 const DEFAULT_CATEGORY = 'Generale'
@@ -185,7 +185,17 @@ export function useWikiState() {
     }, [activeFileId])
 
     const updatePlayground = useCallback((code: string) => {
-        setState((current) => ({ ...current, playground: { code, updatedAt: Date.now() } }))
+        setState((current) => ({
+            ...current,
+            playground: { ...current.playground, code, updatedAt: Date.now() },
+        }))
+    }, [])
+
+    const updatePlaygroundExtraFiles = useCallback((extraFiles: PlaygroundExtraFile[]) => {
+        setState((current) => ({
+            ...current,
+            playground: { ...current.playground, extraFiles, updatedAt: Date.now() },
+        }))
     }, [])
 
     const applyRemoteData = useCallback(
@@ -211,6 +221,7 @@ export function useWikiState() {
         deleteCategory,
         deleteFile,
         updatePlayground,
+        updatePlaygroundExtraFiles,
         applyRemoteData,
     }
 }

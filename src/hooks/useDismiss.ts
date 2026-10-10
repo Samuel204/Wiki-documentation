@@ -1,4 +1,3 @@
-// src/hooks/useDismiss.ts
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 
 /** Chiude un popover con clic esterno o Esc. */

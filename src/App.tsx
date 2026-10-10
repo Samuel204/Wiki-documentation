@@ -78,6 +78,7 @@ export default function App() {
         deleteCategory,
         deleteFile,
         updatePlayground,
+        updatePlaygroundExtraFiles,
         applyRemoteData,
     } = useWikiState()
 
@@ -271,7 +272,9 @@ export default function App() {
                     className={mobilePanel === 'playground' ? 'mobile-active' : undefined}
                     style={playgroundWidth ? { flex: `0 0 ${playgroundWidth}px` } : undefined}
                     code={state.playground.code}
+                    extraFiles={state.playground.extraFiles ?? []}
                     onChange={updatePlayground}
+                    onExtraFilesChange={updatePlaygroundExtraFiles}
                 />
             </main>
 

@@ -128,6 +128,9 @@ export function loadCache(fallback: AppState): AppState {
                     typeof parsed.playground?.updatedAt === 'number'
                         ? parsed.playground.updatedAt
                         : fallback.playground.updatedAt,
+                extraFiles: Array.isArray(parsed.playground?.extraFiles)
+                    ? parsed.playground.extraFiles
+                    : fallback.playground.extraFiles ?? [],
             },
         }
     } catch {

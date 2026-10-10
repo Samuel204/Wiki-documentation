@@ -1,5 +1,3 @@
-// src/lib/playgroundPreview.ts
-//
 // Costruisce il documento caricato nell'iframe del Playground,
 // ripreso dalla versione legacy.
 
@@ -28,7 +26,18 @@ function toScriptString(code: string): string {
         .replace(/\u2029/g, '\\u2029')
 }
 
-export function buildPreviewDocument(userCode: string): string {
+/** File aggiuntivo (modulo secondario) da eseguire prima del codice principale. */
+export interface ExtraFile {
+    name: string
+    code: string
+}
+
+export function buildPreviewDocument(userCode: string, extraFiles: ExtraFile[] = []): string {
+    // Concatena i moduli extra prima del main: le loro funzioni sono disponibili globalmente.
+    const fullCode = extraFiles.length > 0
+        ? extraFiles.map(f => `// === ${f.name} ===\n${f.code}`).join('\n\n') + '\n\n// === App.tsx ===\n' + userCode
+        : userCode
+
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -82,7 +91,7 @@ window.addEventListener('unhandledrejection', function(ev){
 <script>
 (function(){
   try {
-    var compiled = Babel.transform(${toScriptString(userCode)}, {
+    var compiled = Babel.transform(${toScriptString(fullCode)}, {
       presets: ['react'],
       filename: 'playground.jsx'
     }).code;
