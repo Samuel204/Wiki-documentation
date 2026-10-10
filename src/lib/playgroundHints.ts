@@ -1,5 +1,3 @@
-// src/lib/playgroundHints.ts
-//
 // Logica del completamento inline ("ghost text") del Playground.
 // Non dipende da CodeMirror: riceve il testo della riga prima del cursore
 // e la lista di identificatori già presenti nel documento.
