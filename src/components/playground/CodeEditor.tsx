@@ -2,7 +2,7 @@
 // src/components/playground/CodeEditor.tsx
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react'
 import { EditorState } from '@codemirror/state'
-import { EditorView, keymap } from '@codemirror/view'
+import { EditorView, keymap, lineNumbers } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { javascript } from '@codemirror/lang-javascript'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -227,6 +227,7 @@ export function CodeEditor({ initialValue, onChange, onRun, ref }: CodeEditorPro
             doc: initialValueRef.current,
             extensions: [
                 oneDark,
+                lineNumbers(),
                 EditorView.theme({
                     '&': { height: '100%', fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: '12.5px' },
                     '.cm-scroller': { overflow: 'auto', lineHeight: '1.6' },

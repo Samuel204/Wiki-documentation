@@ -322,7 +322,12 @@ export function PlaygroundPanel({ code, extraFiles, onChange, onExtraFilesChange
                     className={`pg-btn ${consoleVisible ? 'active' : ''}`}
                     type="button"
                     aria-pressed={consoleVisible}
-                    onClick={() => setConsoleVisible((v) => !v)}
+                    onClick={() => {
+                        setConsoleVisible((v) => {
+                            if (!v) setLogs([])
+                            return !v
+                        })
+                    }}
                 >
                     <ConsoleIcon /> Console
                 </button>
