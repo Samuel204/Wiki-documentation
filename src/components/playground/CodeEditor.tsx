@@ -1,12 +1,25 @@
+
 // src/components/playground/CodeEditor.tsx
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react'
-import CodeMirror from 'codemirror'
-import 'codemirror/lib/codemirror.css'
-import 'codemirror/theme/material-darker.css'
-import 'codemirror/mode/jsx/jsx'
-import 'codemirror/addon/edit/closebrackets'
-import 'codemirror/addon/edit/matchbrackets'
-import { collectIdentifiers, findGhostSuffix } from '../../lib/playgroundHints'
+import { EditorState } from '@codemirror/state'
+import { EditorView, keymap } from '@codemirror/view'
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import { javascript } from '@codemirror/lang-javascript'
+import { oneDark } from '@codemirror/theme-one-dark'
+import {
+    autocompletion,
+    completionKeymap,
+    type CompletionContext,
+    type CompletionResult,
+} from '@codemirror/autocomplete'
+import {
+    bracketMatching,
+    indentOnInput,
+    syntaxHighlighting,
+    defaultHighlightStyle,
+} from '@codemirror/language'
+import { ViewPlugin, Decoration, type DecorationSet, WidgetType, type ViewUpdate } from '@codemirror/view'
+import { collectIdentifiers, findGhostSuffix, PG_BASE_WORDS, PG_CONTEXT_WORDS } from '../../lib/playgroundHints'
 
 export interface CodeEditorHandle {
     getValue: () => string
@@ -24,16 +37,137 @@ interface CodeEditorProps {
     ref?: Ref<CodeEditorHandle>
 }
 
-type Bookmark = ReturnType<CodeMirror.Editor['setBookmark']>
+// ---------------------------------------------------------------------------
+// Completion source per il Playground (integra playgroundHints con CM6)
+// ---------------------------------------------------------------------------
+function makePgCompletionSource(getDoc: () => string) {
+    return function pgComplete(ctx: CompletionContext): CompletionResult | null {
+        const wordBefore = ctx.matchBefore(/[A-Za-z_$][\w$]*/)
+        const line = ctx.state.doc.lineAt(ctx.pos)
+        const lineBefore = line.text.slice(0, ctx.pos - line.from)
 
+        // Completamento membro: `oggetto.parziale`
+        const dotMatch = lineBefore.match(/(?:^|[^\w$])([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)?$/)
+        if (dotMatch) {
+            const obj = dotMatch[1]
+            const partial = dotMatch[2] ?? ''
+            const members = PG_CONTEXT_WORDS.get(obj)
+            if (members) {
+                return {
+                    from: ctx.pos - partial.length,
+                    options: members
+                        .filter(m => m.startsWith(partial))
+                        .map(m => ({ label: m, type: 'property' as const })),
+                    validFor: /^[\w$]*$/,
+                }
+            }
+        }
+
+        // Completamento parole base + identificatori documento
+        if (!wordBefore || wordBefore.text.length < 1) return null
+        const typed = wordBefore.text
+
+        const docIdentifiers = collectIdentifiers(getDoc())
+        const baseSet = new Set(PG_BASE_WORDS)
+        const allWords = [...new Set([...PG_BASE_WORDS, ...docIdentifiers])]
+
+        const options = allWords
+            .filter(w => w !== typed && w.startsWith(typed))
+            .map(w => ({
+                label: w,
+                type: (baseSet.has(w) ? 'keyword' : 'variable') as 'keyword' | 'variable',
+            }))
+
+        if (options.length === 0) return null
+
+        return {
+            from: wordBefore.from,
+            options,
+            validFor: /^[\w$]*$/,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Ghost text inline via widget decoration CM6
+// ---------------------------------------------------------------------------
+class GhostWidget extends WidgetType {
+    readonly text: string
+    constructor(text: string) { super(); this.text = text }
+    eq(other: GhostWidget) { return this.text === other.text }
+    toDOM() {
+        const span = document.createElement('span')
+        span.className = 'pg-ghost-text'
+        span.textContent = this.text
+        return span
+    }
+    ignoreEvent() { return true }
+}
+
+function makeGhostPlugin(getDoc: () => string) {
+    return ViewPlugin.fromClass(
+        class {
+            decorations: DecorationSet = Decoration.none
+            suffix: string | null = null
+
+            update(update: ViewUpdate) {
+                const sel = update.state.selection.main
+
+                // Rimuovi ghost se c'è selezione o cursori multipli
+                if (!sel.empty || update.state.selection.ranges.length > 1) {
+                    this.suffix = null
+                    this.decorations = Decoration.none
+                    return
+                }
+
+                // Aggiorna solo se doc o cursore sono cambiati
+                if (!update.docChanged && !update.selectionSet) return
+
+                const pos = sel.head
+                const line = update.state.doc.lineAt(pos)
+                const beforeCursor = line.text.slice(0, pos - line.from)
+                const afterCursor = line.text.slice(pos - line.from)
+
+                // Niente ghost a metà parola
+                if (/^[\w$]/.test(afterCursor)) {
+                    this.suffix = null
+                    this.decorations = Decoration.none
+                    return
+                }
+
+                const identifiers = collectIdentifiers(getDoc())
+                const newSuffix = findGhostSuffix(beforeCursor, identifiers)
+
+                if (!newSuffix) {
+                    this.suffix = null
+                    this.decorations = Decoration.none
+                    return
+                }
+
+                this.suffix = newSuffix
+                this.decorations = Decoration.set([
+                    Decoration.widget({
+                        widget: new GhostWidget(newSuffix),
+                        side: 1,
+                    }).range(pos),
+                ])
+            }
+        },
+        { decorations: v => v.decorations },
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Componente React
+// ---------------------------------------------------------------------------
 export function CodeEditor({ initialValue, onChange, onRun, ref }: CodeEditorProps) {
     const hostRef = useRef<HTMLDivElement>(null)
-    const editorRef = useRef<CodeMirror.Editor | null>(null)
+    const viewRef = useRef<EditorView | null>(null)
     const initialValueRef = useRef(initialValue)
     const onChangeRef = useRef(onChange)
     const onRunRef = useRef(onRun)
+    const programmaticRef = useRef(false)
 
-    // Callback sempre aggiornate senza ricreare l'editor.
     useLayoutEffect(() => {
         onChangeRef.current = onChange
         onRunRef.current = onRun
@@ -41,151 +175,133 @@ export function CodeEditor({ initialValue, onChange, onRun, ref }: CodeEditorPro
 
     useEffect(() => {
         const host = hostRef.current
-        if (!host) {
-            return
-        }
+        if (!host) return
 
-        /* ---- Ghost text ---- */
-        let ghost: { bookmark: Bookmark; suffix: string } | null = null
-        let identifiers: string[] | null = null // cache, invalidata a ogni modifica
+        const getDoc = () => viewRef.current?.state.doc.toString() ?? ''
 
-        const clearGhost = () => {
-            ghost?.bookmark.clear()
-            ghost = null
-        }
+        const ghostPlugin = makeGhostPlugin(getDoc)
 
-        const showGhost = (cm: CodeMirror.Editor) => {
-            clearGhost()
-            if (cm.somethingSelected()) {
-                return
-            }
-
-            const cursor = cm.getCursor()
-            const line = cm.getLine(cursor.line)
-
-            // Niente suggerimenti a metà parola, nelle stringhe o nei commenti.
-            if (/[\w$]/.test(line.charAt(cursor.ch))) {
-                return
-            }
-            const tokenType = cm.getTokenAt(cursor).type ?? ''
-            if (/string|comment/.test(tokenType)) {
-                return
-            }
-
-            identifiers ??= collectIdentifiers(cm.getValue())
-            const suffix = findGhostSuffix(line.slice(0, cursor.ch), identifiers)
-            if (!suffix) {
-                return
-            }
-
-            const widget = document.createElement('span')
-            widget.className = 'pg-ghost-text'
-            widget.textContent = suffix
-
-            ghost = {
-                suffix,
-                bookmark: cm.setBookmark(cursor, { widget, insertLeft: false }),
-            }
-        }
-
-        const acceptGhost = (cm: CodeMirror.Editor): boolean => {
-            if (!ghost) {
-                return false
-            }
-            const { suffix } = ghost
-            clearGhost()
-            cm.replaceSelection(suffix)
-            return true
-        }
-
-        const runCode = () => {
-            onRunRef.current?.()
-        }
-
-        /* ---- Editor ---- */
-        const editor = CodeMirror(host, {
-            value: initialValueRef.current,
-            mode: 'jsx',
-            theme: 'material-darker',
-            lineNumbers: true,
-            tabSize: 2,
-            indentUnit: 2,
-            indentWithTabs: false,
-            autoCloseBrackets: true,
-            matchBrackets: true,
-            extraKeys: {
-                Tab: (cm) => {
-                    if (acceptGhost(cm)) {
-                        return
-                    }
-                    cm.execCommand(cm.somethingSelected() ? 'indentMore' : 'insertSoftTab')
+        // Keybinding: Tab / ArrowRight accettano il ghost
+        const acceptGhostKeymap = keymap.of([
+            {
+                key: 'Tab',
+                run(view) {
+                    const plugin = view.plugin(ghostPlugin)
+                    if (!plugin?.suffix) return false
+                    const suffix = plugin.suffix
+                    view.dispatch(view.state.replaceSelection(suffix))
+                    return true
                 },
-                'Shift-Tab': 'indentLess',
-                Right: (cm) => (acceptGhost(cm) ? undefined : CodeMirror.Pass),
-                Esc: (cm) => {
-                    if (!ghost) {
-                        return CodeMirror.Pass
-                    }
-                    clearGhost()
-                    cm.focus()
-                },
-                'Ctrl-Enter': runCode,
-                'Cmd-Enter': runCode,
             },
-        })
-        editorRef.current = editor
+            {
+                key: 'ArrowRight',
+                run(view) {
+                    const plugin = view.plugin(ghostPlugin)
+                    if (!plugin?.suffix) return false
+                    const suffix = plugin.suffix
+                    view.dispatch(view.state.replaceSelection(suffix))
+                    return true
+                },
+            },
+        ])
 
-        editor.on('inputRead', (cm, change) => {
-            if (/[\w$]$/.test(change.text.join(''))) {
-                showGhost(cm)
-            } else {
-                clearGhost()
+        const runKeymap = keymap.of([
+            {
+                key: 'Ctrl-Enter',
+                run() { onRunRef.current?.(); return true },
+            },
+            {
+                key: 'Mod-Enter',
+                run() { onRunRef.current?.(); return true },
+            },
+        ])
+
+        const updateListener = EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+                const origin = programmaticRef.current ? 'setValue' : undefined
+                onChangeRef.current(update.state.doc.toString(), origin)
             }
         })
 
-        // Se il cursore si sposta dalla posizione del ghost, lo rimuove.
-        editor.on('cursorActivity', (cm) => {
-            if (!ghost) {
-                return
-            }
-            const pos = ghost.bookmark.find() as CodeMirror.Position | undefined
-            const cursor = cm.getCursor()
-            if (!pos || pos.line !== cursor.line || pos.ch !== cursor.ch) {
-                clearGhost()
-            }
+        const state = EditorState.create({
+            doc: initialValueRef.current,
+            extensions: [
+                oneDark,
+                EditorView.theme({
+                    '&': { height: '100%', fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: '12.5px' },
+                    '.cm-scroller': { overflow: 'auto', lineHeight: '1.6' },
+                    '.cm-content': { padding: '8px 0' },
+                    '.cm-line': { padding: '0 8px' },
+                    '.cm-gutters': { borderRight: '1px solid #2a323c', background: '#0d1117', color: '#3c4450' },
+                    '.cm-activeLineGutter': { background: '#161b22' },
+                    '.cm-activeLine': { background: 'rgba(255,255,255,0.03)' },
+                    '.cm-selectionBackground': { background: '#264f78 !important' },
+                    '&.cm-focused .cm-selectionBackground': { background: '#264f78 !important' },
+                    '.cm-tooltip': { background: '#1c2431', border: '1px solid #2a323c', borderRadius: '6px' },
+                    '.cm-tooltip-autocomplete > ul': { fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: '12px' },
+                    '.cm-tooltip-autocomplete > ul > li[aria-selected]': { background: '#7c4fe0', color: '#fff' },
+                }),
+
+                javascript({ jsx: true, typescript: false }),
+                syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+                indentOnInput(),
+                bracketMatching(),
+
+                history(),
+                keymap.of([...historyKeymap]),
+
+                // Autocompletamento: rimuoviamo Tab dai completionKeymap per non
+                // interferire con il ghost text
+                autocompletion({
+                    override: [makePgCompletionSource(getDoc)],
+                    activateOnTyping: true,
+                    maxRenderedOptions: 12,
+                    defaultKeymap: false,
+                }),
+                keymap.of(completionKeymap.filter(b => b.key !== 'Tab')),
+
+                // Ghost text inline
+                ghostPlugin,
+                acceptGhostKeymap,
+
+                // Keybinding standard
+                keymap.of(defaultKeymap),
+                keymap.of([indentWithTab]),
+                runKeymap,
+
+                updateListener,
+            ],
         })
 
-        editor.on('blur', clearGhost)
+        const view = new EditorView({ state, parent: host })
+        viewRef.current = view
 
-        editor.on('change', (cm, change) => {
-            identifiers = null
-            onChangeRef.current(cm.getValue(), change.origin)
-        })
-
-        // Sostituisce i refresh manuali: si adatta a resizer, mobile e collapse.
-        const resizeObserver = new ResizeObserver(() => editor.refresh())
+        const resizeObserver = new ResizeObserver(() => view.requestMeasure())
         resizeObserver.observe(host)
 
         return () => {
             resizeObserver.disconnect()
-            clearGhost()
-            editor.getWrapperElement().remove()
-            editorRef.current = null
+            view.destroy()
+            viewRef.current = null
         }
     }, [])
 
     useImperativeHandle(
         ref,
         () => ({
-            getValue: () => editorRef.current?.getValue() ?? '',
+            getValue: () => viewRef.current?.state.doc.toString() ?? '',
             setValue: (value) => {
-                const editor = editorRef.current
-                if (editor && editor.getValue() !== value) {
-                    editor.setValue(value)
-                }
+                const view = viewRef.current
+                if (!view) return
+                if (view.state.doc.toString() === value) return
+                programmaticRef.current = true
+                view.dispatch({
+                    changes: { from: 0, to: view.state.doc.length, insert: value },
+                })
+                programmaticRef.current = false
             },
-            focus: () => editorRef.current?.focus(),
-            refresh: () => editorRef.current?.refresh(),
+            focus: () => viewRef.current?.focus(),
+            refresh: () => viewRef.current?.requestMeasure(),
         }),
         [],
     )
