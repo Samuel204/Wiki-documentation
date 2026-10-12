@@ -874,6 +874,21 @@
   background: var(--pg-bg);
 }
 
+.playground-preview-empty {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: var(--pg-text-faint);
+  font: 12px 'JetBrains Mono', ui-monospace, monospace;
+  text-align: center;
+}
+
+.playground-preview-empty strong {
+  color: var(--pg-text-dim);
+}
+
 .playground-console {
   height: 100px;
   flex-shrink: 0;

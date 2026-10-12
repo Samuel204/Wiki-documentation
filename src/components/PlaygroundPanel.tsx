@@ -88,7 +88,7 @@ function saluta(nome) {
 `
 
 export function PlaygroundPanel({ code, extraFiles, onChange, onExtraFilesChange, className, style, ref }: PlaygroundPanelProps) {
-    const [srcDoc, setSrcDoc] = useState(() => buildPreviewDocument(code))
+    const [srcDoc, setSrcDoc] = useState<string | null>(null)
     const [runId, setRunId] = useState(0)
     const [consoleVisible, setConsoleVisible] = useState(false)
     const [logs, setLogs] = useState<ConsoleEntry[]>([])
@@ -409,15 +409,21 @@ export function PlaygroundPanel({ code, extraFiles, onChange, onExtraFilesChange
 
                 <div className="playground-preview-wrap">
                     <span className="panel-label">PREVIEW</span>
-                    <iframe
-                        key={runId}
-                        ref={iframeRef}
-                        className="playground-preview"
-                        title="Anteprima playground"
-                        sandbox="allow-scripts"
-                        srcDoc={srcDoc}
-                        style={draggingSplit ? { pointerEvents: 'none' } : undefined}
-                    />
+                    {srcDoc === null ? (
+                        <div className="playground-preview-empty">
+                            Premi <strong>Run</strong> (Ctrl+Invio) per eseguire il codice.
+                        </div>
+                    ) : (
+                        <iframe
+                            key={runId}
+                            ref={iframeRef}
+                            className="playground-preview"
+                            title="Anteprima playground"
+                            sandbox="allow-scripts"
+                            srcDoc={srcDoc}
+                            style={draggingSplit ? { pointerEvents: 'none' } : undefined}
+                        />
+                    )}
                 </div>
             </div>
 

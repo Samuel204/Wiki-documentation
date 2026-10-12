@@ -96,9 +96,6 @@ export default function App() {
 
     const adminMode = mode === 'admin'
     const query = search.trim().toLowerCase()
-    const visibleFiles = query
-        ? files.filter((file) => file.title.toLowerCase().includes(query))
-        : files
 
     // Senza alcun Gist configurato la finestra si apre al primo avvio (come la versione legacy).
     const showSettings = settingsOpen || (needsSetup && !setupDismissed)
@@ -194,7 +191,7 @@ export default function App() {
         }
         try {
             await exportAllFiles(files)
-        } catch (err) {
+        } catch(err) {
             console.error(err)
             window.alert('Esportazione non riuscita.')
         }
@@ -223,7 +220,7 @@ export default function App() {
 
                 <Sidebar
                     categories={categories}
-                    files={visibleFiles}
+                    files={files}
                     activeFileId={activeFileId}
                     search={search}
                     collapsed={!isMobile && sidebarCollapsed}
@@ -239,7 +236,7 @@ export default function App() {
                     onDeleteCategory={handleDeleteCategory}
                     onUpload={handleUploadClick}
                     onExportCurrent={() => activeFile && exportFile(activeFile)}
-                    onExportAll={() => void handleExportAll()}
+                    onExportAll={handleExportAll}
                 />
 
                 <DocumentPanel
