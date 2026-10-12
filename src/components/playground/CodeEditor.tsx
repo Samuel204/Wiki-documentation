@@ -9,6 +9,8 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import {
     autocompletion,
     completionKeymap,
+    closeBrackets,
+    closeBracketsKeymap,
     type CompletionContext,
     type CompletionResult,
 } from '@codemirror/autocomplete'
@@ -247,6 +249,7 @@ export function CodeEditor({ initialValue, onChange, onRun, ref }: CodeEditorPro
                 syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
                 indentOnInput(),
                 bracketMatching(),
+                closeBrackets(),
 
                 history(),
                 keymap.of([...historyKeymap]),
@@ -264,6 +267,9 @@ export function CodeEditor({ initialValue, onChange, onRun, ref }: CodeEditorPro
                 // Ghost text inline
                 ghostPlugin,
                 acceptGhostKeymap,
+
+                // Backspace tra una coppia vuota (es. "(|)") cancella entrambe le parentesi
+                keymap.of(closeBracketsKeymap),
 
                 // Keybinding standard
                 keymap.of(defaultKeymap),
