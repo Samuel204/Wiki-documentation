@@ -1,7 +1,4 @@
 # Wiki-documentation
-React learn
-
-# Wiki-documentation
 
 A personal knowledge base built with **React + TypeScript**, designed to write, organize, and explore Markdown documents — with a built-in JavaScript playground.
 
