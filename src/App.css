@@ -1,4 +1,3 @@
-
 :root {
   --bg: #fff;
   --bg-elevated: #f8f9fb;
@@ -113,87 +112,96 @@
   }
 }
 
-/* ---- Schede sidebar (folder-tab browser style) ---- */
+/* ---- Schede sidebar (folder-tab style) ---- */
 .sidebar .sidebar-header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 6px;
-  padding: 8px 10px 0;
+  padding: 8px 8px 0;
   background: transparent;
 }
 
 .sidebar-tab-bar {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex: 1;
   min-width: 0;
-  gap: 0;
-  align-items: flex-end;
+  align-items: stretch;
+}
+
+/* Sfondo scorrevole della tab attiva */
+.sidebar-tab-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 50%;
+  border-radius: 12px 12px 0 0;
+  background: #e3f4ec;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+  background-color 0.25s ease;
+  z-index: -1;
+}
+
+.sidebar-tab-bar[data-view='outline']::before {
+  transform: translateX(100%);
+  background: #efeafd;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-tab-bar::before {
+    transition: none;
+  }
 }
 
 .sidebar .sidebar-tab {
-  position: relative;
   display: inline-flex;
   flex: 1;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
-  padding: 9px 7px 10px;
+  padding: 11px 6px;
   border: none;
-  border-radius: 0;
+  border-radius: 12px 12px 0 0;
   background: transparent;
-  color: var(--text-faint);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: color 0.2s ease;
-  z-index: 1;
-  overflow: visible;
-}
-
-/* Linea indicatrice sotto ogni tab */
-.sidebar .sidebar-tab::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 10%;
-  right: 10%;
-  height: 2px;
-  border-radius: 2px;
-  background: transparent;
-  transition: background 0.2s ease;
 }
 
 .sidebar-tab svg {
   flex-shrink: 0;
 }
 
-/* Hover tab */
-.sidebar .sidebar-tab:hover {
-  color: #6D4AE0;
+/* Il testo viene tagliato se lo spazio è insufficiente */
+.sidebar-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.sidebar .sidebar-tab:hover::after {
-  background: rgba(109, 74, 224, 0.25);
+/* Colori fissi per scheda — indipendenti dallo stato attivo */
+.sidebar .outline-tab {
+  color: #6d4ae0;
 }
 
-/* Tab Argomenti attiva */
-.sidebar .topics-tab.active {
-  color: #1c7a54;
+/* Hover leggero solo sulla scheda non attiva */
+.sidebar .sidebar-tab:not(.active):hover {
+  background: rgba(16, 24, 40, 0.04);
 }
 
-.sidebar .topics-tab.active::after {
-  background: #1c7a54;
+/* Pannello tabpanel — occupa tutto lo spazio disponibile */
+.sidebar-tabpanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
-/* Tab Outline attiva */
-.sidebar .outline-tab.active {
-  color: #6D4AE0;
-}
-
-.sidebar .outline-tab.active::after {
-  background: #6D4AE0;
+.outline-tabpanel {
+  overflow: hidden;
 }
 
 /* Pulsante collapse */
@@ -1810,4 +1818,23 @@
   .settings-actions-right .side-btn {
     flex: 1;
   }
+}
+
+/* Superficie neutra condivisa tra tab attiva e contenuto. */
+.sidebar {
+  --sidebar-tab-surface: var(--bg-panel);
+}
+
+.sidebar .sidebar-header {
+  background: #f0f2f5;
+}
+
+.sidebar-tab-bar::before,
+.sidebar-tab-bar[data-view='outline']::before {
+  background: var(--sidebar-tab-surface);
+}
+
+/* Nessuna sfumatura su ricerca e recenti. */
+.sidebar-panel {
+  background: var(--sidebar-tab-surface);
 }

@@ -48,6 +48,10 @@ export function DocumentOutline({
         function updateActive() {
             activeFrame = 0
 
+            if (!body) {
+                return
+            }
+
             // Durante lo scroll avviato da un click non sovrascrivere la scelta.
             if (performance.now() < navigationLockUntil.current) {
                 return
