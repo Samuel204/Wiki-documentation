@@ -15,6 +15,7 @@ import { useWikiState } from './hooks/useWikiState'
 import { exportAllFiles, exportFile } from './lib/export'
 import { STORAGE_KEYS } from './lib/storage'
 import type { AppMode } from './types/wiki'
+import {DocumentOutline} from "./components/DocumentOutline.tsx";
 
 const MOBILE_QUERY = '(max-width: 980px)'
 const PLAYGROUND_MIN_WIDTH = 320
@@ -64,6 +65,7 @@ export default function App() {
     const layoutRef = useRef<HTMLElement>(null)
     const uploadInputRef = useRef<HTMLInputElement>(null)
     const playgroundRef = useRef<PlaygroundPanelHandle>(null)
+    const documentBodyRef = useRef<HTMLDivElement>(null)
 
     const {
         state,
@@ -237,10 +239,28 @@ export default function App() {
                     onUpload={handleUploadClick}
                     onExportCurrent={() => activeFile && exportFile(activeFile)}
                     onExportAll={handleExportAll}
+                    outline={
+                        activeFile ? (
+                            <DocumentOutline
+                                key={activeFile.id}
+                                bodyRef={documentBodyRef}
+                                title={activeFile.title}
+                                onNavigate={() => {
+                                    setMobileSidebarOpen(false)
+                                    setMobilePanel('doc')
+                                }}
+                            />
+                        ) : (
+                            <p className="sidebar-empty">
+                                Seleziona un documento per visualizzarne l’indice.
+                            </p>
+                        )
+                    }
                 />
 
                 <DocumentPanel
                     className={mobilePanel === 'doc' ? 'mobile-active' : undefined}
+                    bodyRef={documentBodyRef}
                     file={activeFile}
                     categories={categories}
                     adminMode={adminMode}

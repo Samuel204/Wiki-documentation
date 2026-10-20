@@ -1,6 +1,8 @@
 import type { WikiFile } from '../types/wiki'
+import { type ReactNode, useState } from 'react'
 
 interface SidebarProps {
+    outline: ReactNode
     categories: string[]
     files: WikiFile[]
     activeFileId: string | null
@@ -114,6 +116,7 @@ function CloseIcon() {
 }
 
 export function Sidebar({
+                            outline,
                             categories,
                             files,
                             activeFileId,
@@ -133,22 +136,53 @@ export function Sidebar({
                             onExportCurrent,
                             onExportAll,
                         }: SidebarProps) {
+    const [view, setView] = useState<'topics' | 'outline'>('topics')
+
     const recentFiles = files
         .filter((file) => file.recentlyOpenedAt)
-        .sort(
-            (a, b) => (b.recentlyOpenedAt ?? 0) - (a.recentlyOpenedAt ?? 0),
-        )
+        .sort((a, b) => (b.recentlyOpenedAt ?? 0) - (a.recentlyOpenedAt ?? 0))
         .slice(0, 2)
 
     return (
         <aside
-            className={`sidebar ${collapsed ? 'collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`}
+            className={`sidebar${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}
         >
+            {/* ── Header con tab + pulsante collapse ── */}
             <div className="sidebar-header">
-                <strong>
-                    <BookIcon />
-                    Argomenti
-                </strong>
+                <div className="sidebar-tab-bar" role="group" aria-label="Navigazione sidebar">
+                    <button
+                        className={`sidebar-tab topics-tab${view === 'topics' ? ' active' : ''}`}
+                        type="button"
+                        aria-pressed={view === 'topics'}
+                        onClick={() => setView('topics')}
+                    >
+                        <BookIcon />
+                        Argomenti
+                    </button>
+                    <button
+                        className={`sidebar-tab outline-tab${view === 'outline' ? ' active' : ''}`}
+                        type="button"
+                        aria-pressed={view === 'outline'}
+                        onClick={() => setView('outline')}
+                    >
+                        <svg
+                            viewBox="0 0 24 24"
+                            width="17"
+                            height="17"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M9 5h12M9 12h12M9 19h12" />
+                            <circle cx="3" cy="5" r="1" />
+                            <circle cx="3" cy="12" r="1" />
+                            <circle cx="3" cy="19" r="1" />
+                        </svg>
+                        Outline
+                    </button>
+                </div>
 
                 <button
                     className="icon-button sidebar-collapse-button"
@@ -160,178 +194,164 @@ export function Sidebar({
                 </button>
             </div>
 
-            <label className="search-field">
-                <span className="sr-only">Cerca file</span>
-                <input
-                    type="search"
-                    value={search}
-                    placeholder="Cerca file..."
-                    onChange={(event) => onSearchChange(event.target.value)}
-                />
-            </label>
+            {/* ── Pannello contenuto (sfondo segue la tab attiva) ── */}
+            <div className={`sidebar-panel${view === 'outline' ? ' view-outline' : ''}`}>
 
-            <div className="category-list">
-                {recentFiles.length > 0 && (
-                    <section className="recent-block">
-                        <div className="category-heading recent-heading">
-                            <ClockIcon />
-                            <span>Recenti</span>
-                        </div>
+                {/* ── Vista Argomenti ── */}
+                <label className="search-field" hidden={view !== 'topics'}>
+                    <span className="sr-only">Cerca file</span>
+                    <input
+                        type="search"
+                        value={search}
+                        placeholder="Cerca file..."
+                        onChange={(e) => onSearchChange(e.target.value)}
+                    />
+                </label>
 
-                        <div className="file-list recent-files">
-                            {recentFiles.map((file) => (
-                                <button
-                                    className={`file-item ${
-                                        activeFileId === file.id ? 'active' : ''
-                                    }`}
-                                    key={`recent-${file.id}`}
-                                    type="button"
-                                    onClick={() => onSelectFile(file.id)}
-                                >
-                                    <FileIcon />
-                                    <span className="file-name">{file.title}</span>
-                                    <span className="file-category">
-                                        {file.category}
-                                    </span>
-                                </button>
-                            ))}
-                        </div>
-                    </section>
-                )}
-
-                {categories.map((category) => {
-                    const categoryFiles = files.filter(
-                        (file) => file.category === category,
-                    )
-
-                    // In ricerca: nasconde le categorie vuote e apre le altre.
-                    if (searching && categoryFiles.length === 0) {
-                        return null
-                    }
-
-                    const isCollapsed = searching
-                        ? false
-                        : (collapsedCategories[category] ?? true)
-
-                    return (
-                        <section className="category-block" key={category}>
-                            <div
-                                className={`category-heading ${
-                                    isCollapsed ? 'collapsed' : ''
-                                }`}
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => onToggleCategory(category)}
-                                onKeyDown={(event) => {
-                                    if (
-                                        event.key === 'Enter' ||
-                                        event.key === ' '
-                                    ) {
-                                        event.preventDefault()
-                                        onToggleCategory(category)
-                                    }
-                                }}
-                            >
-                                <span className="category-chevron" aria-hidden="true">
-                                    ▾
-                                </span>
-                                <FolderIcon />
-                                <span className="category-name">{category}</span>
-                                <span className="category-count">
-                                    {categoryFiles.length}
-                                </span>
-
-                                {adminMode && (
-                                    <button
-                                        className="delete-category"
-                                        type="button"
-                                        title={`Elimina ${category}`}
-                                        onClick={(event) => {
-                                            event.stopPropagation()
-                                            onDeleteCategory(category)
-                                        }}
-                                    >
-                                        <CloseIcon />
-                                    </button>
-                                )}
+                <div className="category-list" hidden={view !== 'topics'}>
+                    {recentFiles.length > 0 && (
+                        <section className="recent-block">
+                            <div className="category-heading recent-heading">
+                                <ClockIcon />
+                                <span>Recenti</span>
                             </div>
-
-                            {!isCollapsed && (
-                                <div className="file-list">
-                                    {categoryFiles.map((file) => (
-                                        <button
-                                            className={`file-item ${
-                                                activeFileId === file.id
-                                                    ? 'active'
-                                                    : ''
-                                            }`}
-                                            key={file.id}
-                                            type="button"
-                                            onClick={() => onSelectFile(file.id)}
-                                        >
-                                            <FileIcon />
-                                            <span className="file-name">
-                                                {file.title}
-                                            </span>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
+                            <div className="file-list recent-files">
+                                {recentFiles.map((file) => (
+                                    <button
+                                        key={`recent-${file.id}`}
+                                        className={`file-item${activeFileId === file.id ? ' active' : ''}`}
+                                        type="button"
+                                        onClick={() => onSelectFile(file.id)}
+                                    >
+                                        <FileIcon />
+                                        <span className="file-name">{file.title}</span>
+                                        <span className="file-category">{file.category}</span>
+                                    </button>
+                                ))}
+                            </div>
                         </section>
-                    )
-                })}
-                {searching && files.length === 0 && (
-                    <div className="sidebar-empty">Nessun file trovato</div>
+                    )}
+
+                    {categories.map((category) => {
+                        const categoryFiles = files.filter((f) => f.category === category)
+
+                        if (searching && categoryFiles.length === 0) return null
+
+                        const isCategoryCollapsed = searching
+                            ? false
+                            : (collapsedCategories[category] ?? true)
+
+                        return (
+                            <section className="category-block" key={category}>
+                                <div
+                                    className={`category-heading${isCategoryCollapsed ? ' collapsed' : ''}`}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => onToggleCategory(category)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault()
+                                            onToggleCategory(category)
+                                        }
+                                    }}
+                                >
+                                    <span className="category-chevron" aria-hidden="true">▾</span>
+                                    <FolderIcon />
+                                    <span className="category-name">{category}</span>
+                                    <span className="category-count">{categoryFiles.length}</span>
+                                    {adminMode && (
+                                        <button
+                                            className="delete-category"
+                                            type="button"
+                                            title={`Elimina ${category}`}
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onDeleteCategory(category)
+                                            }}
+                                        >
+                                            <CloseIcon />
+                                        </button>
+                                    )}
+                                </div>
+
+                                {!isCategoryCollapsed && (
+                                    <div className="file-list">
+                                        {categoryFiles.map((file) => (
+                                            <button
+                                                key={file.id}
+                                                className={`file-item${activeFileId === file.id ? ' active' : ''}`}
+                                                type="button"
+                                                onClick={() => onSelectFile(file.id)}
+                                            >
+                                                <FileIcon />
+                                                <span className="file-name">{file.title}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </section>
+                        )
+                    })}
+
+                    {searching && files.length === 0 && (
+                        <div className="sidebar-empty">Nessun file trovato</div>
+                    )}
+                </div>
+
+                {/* ── Vista Outline ── */}
+                <div className="outline-container" hidden={view !== 'outline'}>
+                    {outline}
+                </div>
+
+                {/* ── Footer admin ── */}
+                {adminMode && (
+                    <footer className="sidebar-footer">
+                        <button
+                            className="side-btn new-category-button"
+                            type="button"
+                            onClick={onCreateCategory}
+                        >
+                            <PlusIcon />
+                            Nuova categoria
+                        </button>
+
+                        <div className="footer-divider" />
+
+                        <div className="footer-actions">
+                            <button
+                                className="side-btn footer-action"
+                                type="button"
+                                title="Carica file .md"
+                                onClick={onUpload}
+                            >
+                                <UploadIcon />
+                                <span className="btn-label">Carica</span>
+                            </button>
+
+                            <button
+                                className="side-btn footer-action subtle"
+                                type="button"
+                                title="Esporta file corrente"
+                                disabled={!activeFileId}
+                                onClick={onExportCurrent}
+                            >
+                                <DownloadIcon />
+                                <span className="btn-label">Download</span>
+                            </button>
+
+                            <button
+                                className="side-btn footer-action subtle"
+                                type="button"
+                                title="Esporta tutti i file"
+                                onClick={onExportAll}
+                            >
+                                <ExportIcon />
+                                <span className="btn-label">Export</span>
+                            </button>
+                        </div>
+                    </footer>
                 )}
             </div>
-
-            {adminMode && (
-                <footer className="sidebar-footer">
-                    <button
-                        className="side-btn new-category-button"
-                        type="button"
-                        onClick={onCreateCategory}
-                    >
-                        <PlusIcon />
-                        Nuova categoria
-                    </button>
-
-                    <div className="footer-divider" />
-
-                    <div className="footer-actions">
-                        <button
-                            className="side-btn footer-action"
-                            type="button"
-                            title="Carica file .md"
-                            onClick={onUpload}
-                        >
-                            <UploadIcon />
-                            <span className="btn-label">Carica</span>
-                        </button>
-
-                        <button
-                            className="side-btn footer-action subtle"
-                            type="button"
-                            title="Esporta file corrente"
-                            disabled={!activeFileId}
-                            onClick={onExportCurrent}
-                        >
-                            <DownloadIcon />
-                            <span className="btn-label">Download</span>
-                        </button>
-
-                        <button
-                            className="side-btn footer-action subtle"
-                            type="button"
-                            title="Esporta tutti i file"
-                            onClick={onExportAll}
-                        >
-                            <ExportIcon />
-                            <span className="btn-label">Export</span>
-                        </button>
-                    </div>
-                </footer>
-            )}
         </aside>
     )
 }

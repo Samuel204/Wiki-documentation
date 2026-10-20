@@ -1,10 +1,11 @@
 // src/components/DocumentPanel.tsx
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import {useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject} from 'react'
 import { renderMarkdown, type RenderedMarkdown } from '../lib/markdown'
 import { useDismiss } from '../hooks/useDismiss'
 import type { WikiFile } from '../types/wiki'
 
 interface DocumentPanelProps {
+    bodyRef: RefObject<HTMLDivElement | null>
     file: WikiFile | null
     categories: string[]
     adminMode: boolean
@@ -281,6 +282,7 @@ function EmptyState({ adminMode, className, onUpload }: { adminMode: boolean; cl
 
 /* ---------------- Pannello ---------------- */
 export function DocumentPanel({
+                                  bodyRef,
                                   file,
                                   categories,
                                   adminMode,
@@ -290,7 +292,6 @@ export function DocumentPanel({
                                   onUpload,
                                   onOpenInPlayground,
                               }: DocumentPanelProps) {
-    const bodyRef = useRef<HTMLDivElement>(null)
     const [editing, setEditing] = useState(false)
     const [previousFileId, setPreviousFileId] = useState(file?.id)
 
