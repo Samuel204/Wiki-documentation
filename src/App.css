@@ -1826,7 +1826,7 @@
 }
 
 .sidebar .sidebar-header {
-  background: #f0f2f5;
+  background: rgb(240 242 245 / 0.53);
 }
 
 .sidebar-tab-bar::before,
@@ -1837,4 +1837,18 @@
 /* Nessuna sfumatura su ricerca e recenti. */
 .sidebar-panel {
   background: var(--sidebar-tab-surface);
+}
+
+/* Outline integrato nella superficie della sidebar. */
+.sidebar .outline-container {
+  padding: 10px 12px 12px;
+  background: transparent;
+}
+
+.sidebar .document-outline {
+  min-height: 100%;
+  padding: 7px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
