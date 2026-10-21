@@ -1,5 +1,5 @@
 // src/components/DocumentPanel.tsx
-import {useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject} from 'react'
+import {useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject, useLayoutEffect} from 'react'
 import { renderMarkdown, type RenderedMarkdown } from '../lib/markdown'
 import { useDismiss } from '../hooks/useDismiss'
 import type { WikiFile } from '../types/wiki'
@@ -111,6 +111,20 @@ function showCopiedState(button: HTMLButtonElement) {
             button.innerHTML = COPY_BUTTON_HTML
         }, 1800),
     )
+}
+
+/** Posizione di scroll relativa (0 = inizio, 1 = fine). */
+function getScrollRatio(element: HTMLElement | null): number {
+    if (!element) {
+        return 0
+    }
+    const max = element.scrollHeight - element.clientHeight
+    return max > 0 ? element.scrollTop / max : 0
+}
+
+function applyScrollRatio(element: HTMLElement, ratio: number): void {
+    const max = element.scrollHeight - element.clientHeight
+    element.scrollTop = Math.round(ratio * Math.max(max, 0))
 }
 
 /* ---------------- Selettore categoria ---------------- */
@@ -294,6 +308,9 @@ export function DocumentPanel({
                               }: DocumentPanelProps) {
     const [editing, setEditing] = useState(false)
     const [previousFileId, setPreviousFileId] = useState(file?.id)
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
+    // Posizione da ripristinare dopo il toggle modifica/anteprima (null = nessun toggle in corso).
+    const pendingScrollRatioRef = useRef<number | null>(null)
 
     // Cambio file → torna in anteprima.
     if (file?.id !== previousFileId) {
@@ -315,8 +332,29 @@ export function DocumentPanel({
         bodyRef.current?.scrollTo({ top: 0 })
     }, [file?.id])
 
+    // Ripristina la posizione di scroll dopo il toggle modifica/anteprima.
+    useLayoutEffect(() => {
+        const ratio = pendingScrollRatioRef.current
+        if (ratio === null) {
+            return
+        }
+        pendingScrollRatioRef.current = null
+
+        const target = isEditing ? textareaRef.current : bodyRef.current
+        if (target) {
+            applyScrollRatio(target, ratio)
+        }
+    }, [isEditing])
+
     if (!file) {
         return <EmptyState adminMode={adminMode} className={className} onUpload={onUpload} />
+    }
+
+    function changeEditing(next: boolean) {
+        // Legge lo scroll dall'elemento che scrolla adesso.
+        const source = isEditing ? textareaRef.current : bodyRef.current
+        pendingScrollRatioRef.current = getScrollRatio(source)
+        setEditing(next)
     }
 
     function handleContentClick(event: MouseEvent<HTMLElement>) {
@@ -371,7 +409,7 @@ export function DocumentPanel({
                 {adminMode && (
                     <ActionsMenu
                         editing={editing}
-                        onToggleEdit={() => setEditing((current) => !current)}
+                        onToggleEdit={() => changeEditing(!editing)}
                         onDelete={handleDelete}
                     />
                 )}
@@ -380,6 +418,7 @@ export function DocumentPanel({
             <div className="document-body" ref={bodyRef}>
                 {isEditing ? (
                     <textarea
+                        ref={textareaRef}
                         className="document-editor"
                         value={file.content}
                         spellCheck={false}
@@ -387,7 +426,7 @@ export function DocumentPanel({
                         onChange={(event) => onUpdate({ content: event.target.value })}
                         onKeyDown={(event) => {
                             if (event.key === 'Escape') {
-                                setEditing(false)
+                                changeEditing(false)
                             }
                         }}
                     />
