@@ -1834,12 +1834,10 @@
   background: var(--sidebar-tab-surface);
 }
 
-/* Nessuna sfumatura su ricerca e recenti. */
 .sidebar-panel {
   background: var(--sidebar-tab-surface);
 }
 
-/* Outline integrato nella superficie della sidebar. */
 .sidebar .outline-container {
   padding: 10px 12px 12px;
   background: transparent;

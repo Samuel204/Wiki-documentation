@@ -1,4 +1,3 @@
-// src/components/DocumentPanel.tsx
 import {useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject, useLayoutEffect} from 'react'
 import { renderMarkdown, type RenderedMarkdown } from '../lib/markdown'
 import { useDismiss } from '../hooks/useDismiss'
@@ -77,7 +76,19 @@ function TrashIcon() {
     )
 }
 
-/* ---------------- Utility ---------------- */
+function RenameIcon() {
+    return (
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 7V5h11v2" />
+            <path d="M9.5 5v14" />
+            <path d="M7 19h5" />
+            <path d="M17 9v10" />
+            <path d="M15 9h4" />
+            <path d="M15 19h4" />
+        </svg>
+    )
+}
+
 async function copyToClipboard(text: string): Promise<void> {
     if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text)
@@ -127,42 +138,118 @@ function applyScrollRatio(element: HTMLElement, ratio: number): void {
     element.scrollTop = Math.round(ratio * Math.max(max, 0))
 }
 
-/* ---------------- Selettore categoria ---------------- */
-interface CategoryPickerProps {
-    value: string
+/* ---------------- Titolo + selettore categoria ---------------- */
+interface TitlePickerProps {
+    title: string
+    category: string
     categories: string[]
-    disabled: boolean
-    onChange: (category: string) => void
+    adminMode: boolean
+    renaming: boolean
+    onRename: (title: string) => void
+    onRenameStart: () => void
+    onRenameEnd: () => void
+    onChangeCategory: (category: string) => void
 }
 
-function CategoryPicker({ value, categories, disabled, onChange }: CategoryPickerProps) {
+function TitlePicker({
+                         title,
+                         category,
+                         categories,
+                         adminMode,
+                         renaming,
+                         onRename,
+                         onRenameStart,
+                         onRenameEnd,
+                         onChangeCategory,
+                     }: TitlePickerProps) {
     const [open, setOpen] = useState(false)
     const ref = useRef<HTMLDivElement>(null)
+    const inputRef = useRef<HTMLInputElement>(null)
     useDismiss(ref, open, () => setOpen(false))
 
+    const canPick = adminMode && categories.length > 0
+
+    useEffect(() => {
+        if (renaming) {
+            inputRef.current?.focus()
+            inputRef.current?.select()
+        }
+    }, [renaming])
+
+    function finishRename() {
+        if (!title.trim()) {
+            onRename('Senza titolo')
+        }
+        onRenameEnd()
+    }
+
+    if (renaming) {
+        return (
+            <div className="title-picker">
+                <input
+                    ref={inputRef}
+                    className="title-picker-input"
+                    value={title}
+                    placeholder="Titolo file"
+                    aria-label="Titolo file"
+                    onChange={(event) => onRename(event.target.value)}
+                    onBlur={finishRename}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === 'Escape') {
+                            event.preventDefault()
+                            finishRename()
+                        }
+                    }}
+                />
+            </div>
+        )
+    }
+
+    if (!adminMode) {
+        return (
+            <div className="title-picker">
+                <h1 className="title-picker-toggle title-picker-static">
+                        <span className="title-picker-category">
+                            <FolderIcon />
+                            <span>{category || 'Categoria'}</span>
+                        </span>
+                    <span className="title-picker-name">{title || 'Senza titolo'}</span>
+                </h1>
+            </div>
+        )
+    }
+
     return (
-        <div ref={ref} className={`category-picker ${open ? 'open' : ''}`}>
+        <div ref={ref} className={`title-picker ${open ? 'open' : ''}`}>
             <button
-                className="category-picker-toggle"
+                className="title-picker-toggle"
                 type="button"
                 aria-haspopup="listbox"
                 aria-expanded={open}
-                aria-label="Cambia categoria"
-                disabled={disabled || categories.length === 0}
-                onClick={() => setOpen((current) => !current)}
+                aria-label={`${title} — categoria ${category || 'nessuna'}`}
+                title="Cambia categoria (doppio clic per rinominare)"
+                onClick={() => canPick && setOpen((current) => !current)}
+                onDoubleClick={() => {
+                    setOpen(false)
+                    onRenameStart()
+                }}
             >
-                <FolderIcon className="category-icon" />
-                <span className="category-label">{value || 'Categoria'}</span>
-                {!disabled && <ChevronDownIcon />}
+                <span className="title-picker-category">
+                    <FolderIcon />
+                    <span>{category || 'Categoria'}</span>
+                </span>
+                <span className="title-picker-name">{title || 'Senza titolo'}</span>
+                {canPick && <ChevronDownIcon />}
             </button>
 
             {open && (
                 <div className="category-dropdown" role="listbox" aria-label="Categorie">
-                    {categories.map((category) => {
-                        const selected = category === value
+                    <div className="dropdown-label">Sposta in categoria</div>
+                    {categories.map((item) => {
+                        const selected = item === category
                         return (
                             <button
-                                key={category}
+                                key={item}
                                 type="button"
                                 role="option"
                                 aria-selected={selected}
@@ -170,11 +257,11 @@ function CategoryPicker({ value, categories, disabled, onChange }: CategoryPicke
                                 onClick={() => {
                                     setOpen(false)
                                     if (!selected) {
-                                        onChange(category)
+                                        onChangeCategory(item)
                                     }
                                 }}
                             >
-                                <span className="option-name">{category}</span>
+                                <span className="option-name">{item}</span>
                                 {selected && (
                                     <span className="check">
                                         <CheckIcon />
@@ -193,10 +280,11 @@ function CategoryPicker({ value, categories, disabled, onChange }: CategoryPicke
 interface ActionsMenuProps {
     editing: boolean
     onToggleEdit: () => void
+    onRename: () => void
     onDelete: () => void
 }
 
-function ActionsMenu({ editing, onToggleEdit, onDelete }: ActionsMenuProps) {
+function ActionsMenu({ editing, onToggleEdit, onRename, onDelete }: ActionsMenuProps) {
     const [open, setOpen] = useState(false)
     const ref = useRef<HTMLDivElement>(null)
     useDismiss(ref, open, () => setOpen(false))
@@ -224,6 +312,10 @@ function ActionsMenu({ editing, onToggleEdit, onDelete }: ActionsMenuProps) {
                     <button className="actions-item" type="button" role="menuitem" onClick={select(onToggleEdit)}>
                         {editing ? <EyeIcon /> : <PencilIcon />}
                         {editing ? 'Anteprima' : 'Modifica'}
+                    </button>
+                    <button className="actions-item" type="button" role="menuitem" onClick={select(onRename)}>
+                        <RenameIcon />
+                        Rinomina
                     </button>
                     <button className="actions-item danger" type="button" role="menuitem" onClick={select(onDelete)}>
                         <TrashIcon />
@@ -307,6 +399,7 @@ export function DocumentPanel({
                                   onOpenInPlayground,
                               }: DocumentPanelProps) {
     const [editing, setEditing] = useState(false)
+    const [renaming, setRenaming] = useState(false)
     const [previousFileId, setPreviousFileId] = useState(file?.id)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     // Posizione da ripristinare dopo il toggle modifica/anteprima (null = nessun toggle in corso).
@@ -316,6 +409,7 @@ export function DocumentPanel({
     if (file?.id !== previousFileId) {
         setPreviousFileId(file?.id)
         setEditing(false)
+        setRenaming(false)
     }
 
     const isEditing = adminMode && editing
@@ -389,27 +483,23 @@ export function DocumentPanel({
     return (
         <section className={`document-panel ${className ?? ''}`}>
             <header className="document-header">
-                <input
-                    className="document-title"
-                    value={file.title}
-                    placeholder="Titolo file"
-                    aria-label="Titolo file"
-                    readOnly={!adminMode}
-                    tabIndex={adminMode ? 0 : -1}
-                    onChange={(event) => onUpdate({ title: event.target.value })}
-                />
-
-                <CategoryPicker
-                    value={file.category}
+                <TitlePicker
+                    title={file.title}
+                    category={file.category}
                     categories={categories}
-                    disabled={!adminMode}
-                    onChange={(category) => onUpdate({ category })}
+                    adminMode={adminMode}
+                    renaming={adminMode && renaming}
+                    onRename={(title) => onUpdate({ title })}
+                    onRenameStart={() => setRenaming(true)}
+                    onRenameEnd={() => setRenaming(false)}
+                    onChangeCategory={(category) => onUpdate({ category })}
                 />
 
                 {adminMode && (
                     <ActionsMenu
                         editing={editing}
                         onToggleEdit={() => changeEditing(!editing)}
+                        onRename={() => setRenaming(true)}
                         onDelete={handleDelete}
                     />
                 )}
