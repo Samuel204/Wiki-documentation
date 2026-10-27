@@ -2,6 +2,7 @@ import {useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject, u
 import { renderMarkdown, type RenderedMarkdown } from '../lib/markdown'
 import { useDismiss } from '../hooks/useDismiss'
 import type { WikiFile } from '../types/wiki'
+import {CheckIcon, ChevronDownIcon, EyeIcon, PencilIcon, RenameIcon, TrashIcon} from "./icons.tsx";
 
 interface DocumentPanelProps {
     bodyRef: RefObject<HTMLDivElement | null>
@@ -27,64 +28,6 @@ function FolderIcon({ className }: { className?: string }) {
     return (
         <svg className={className} viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-        </svg>
-    )
-}
-
-function ChevronDownIcon({ size = 15 }: { size?: number }) {
-    return (
-        <svg className="chev-down" viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="6 9 12 15 18 9" />
-        </svg>
-    )
-}
-
-function CheckIcon() {
-    return (
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="5 12 10 17 19 7" />
-        </svg>
-    )
-}
-
-function PencilIcon() {
-    return (
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 20h9" />
-            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-        </svg>
-    )
-}
-
-function EyeIcon() {
-    return (
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
-            <circle cx="12" cy="12" r="3" />
-        </svg>
-    )
-}
-
-function TrashIcon() {
-    return (
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-            <path d="M10 11v6" />
-            <path d="M14 11v6" />
-        </svg>
-    )
-}
-
-function RenameIcon() {
-    return (
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 7V5h11v2" />
-            <path d="M9.5 5v14" />
-            <path d="M7 19h5" />
-            <path d="M17 9v10" />
-            <path d="M15 9h4" />
-            <path d="M15 19h4" />
         </svg>
     )
 }

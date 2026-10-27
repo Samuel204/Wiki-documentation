@@ -1,5 +1,5 @@
-
 import { useEffect, useRef, useState, type RefObject } from 'react'
+import { FileIcon } from './icons'
 
 interface DocumentOutlineProps {
     bodyRef: RefObject<HTMLDivElement | null>
@@ -11,15 +11,6 @@ interface OutlineHeading {
     id: string
     title: string
     element: HTMLHeadingElement
-}
-
-function FileIcon() {
-    return (
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-        </svg>
-    )
 }
 
 // Tempo in cui lo scroll-spy resta sospeso dopo un click sull'indice.

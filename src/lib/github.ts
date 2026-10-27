@@ -1,6 +1,3 @@
-
-// src/lib/github.ts
-//
 // Wrapper sulle API GitHub Gist usate per sincronizzare i contenuti della Wiki.
 // Replica la logica dell'app legacy (pull pubblico/autenticato, push con PATCH,
 // creazione gist, parsing errori e gestione del rate-limit) adattandola a un

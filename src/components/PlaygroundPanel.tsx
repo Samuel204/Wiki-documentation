@@ -13,6 +13,7 @@ import { DEFAULT_PLAYGROUND_CODE } from '../hooks/useWikiState.ts'
 import { CodeEditor, type CodeEditorHandle } from './playground/CodeEditor'
 import { buildPreviewDocument, isPlaygroundMessage, type ExtraFile } from '../lib/playgroundPreview'
 import type { PlaygroundExtraFile } from '../types/wiki'
+import { ConsoleIcon, ResetIcon, RunIcon } from './icons'
 
 const SAVE_DEBOUNCE_MS = 900
 const FLASH_MS = 700
@@ -42,32 +43,6 @@ interface ConsoleEntry {
 
 function createExtraFileId(): string {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
-}
-
-function RunIcon() {
-    return (
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
-            <polygon points="5 3 19 12 5 21 5 3" />
-        </svg>
-    )
-}
-
-function ResetIcon() {
-    return (
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="1 4 1 10 7 10" />
-            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-        </svg>
-    )
-}
-
-function ConsoleIcon() {
-    return (
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="4 17 10 11 4 5" />
-            <line x1="12" y1="19" x2="20" y2="19" />
-        </svg>
-    )
 }
 
 function loadSplitHeight(): number | null {
