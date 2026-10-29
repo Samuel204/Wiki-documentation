@@ -89,6 +89,11 @@ export function PlaygroundPanel({ code, extraFiles, onChange, onExtraFilesChange
     const extraEditorsRef = useRef<Map<string, CodeEditorHandle>>(new Map())
     // Ref aggiornato ai file extra correnti senza causare re-render nei callback
     const extraFilesRef = useRef(extraFiles)
+    const executionRef = useRef<{
+        token: string
+        main: string
+        extras: { id: string; code: string }[]
+    } | null>(null)
 
     useLayoutEffect(() => {
         onChangeRef.current = onChange
@@ -174,10 +179,24 @@ export function PlaygroundPanel({ code, extraFiles, onChange, onExtraFilesChange
     const run = useCallback((source?: string) => {
         const mainCode = source ?? editorRef.current?.getValue() ?? ''
         const extras: ExtraFile[] = extraFilesRef.current.map(f => ({
+            id: f.id,
             name: f.name,
             code: extraEditorsRef.current.get(f.id)?.getValue() ?? f.code,
         }))
-        setSrcDoc(buildPreviewDocument(mainCode, extras))
+        const token = crypto.randomUUID()
+
+        executionRef.current = {
+            token,
+            main: mainCode,
+            extras: extras.map(({ id, code }) => ({ id, code })),
+        }
+
+        editorRef.current?.clearRuntimeErrors()
+        for (const editor of extraEditorsRef.current.values()) {
+            editor.clearRuntimeErrors()
+        }
+
+        setSrcDoc(buildPreviewDocument(mainCode, extras, token))
         setRunId((n) => n + 1)
         logIdRef.current += 1
         setLogs([{ id: logIdRef.current, type: 'log', message: '▶ Esecuzione avviata' }])
@@ -187,15 +206,67 @@ export function PlaygroundPanel({ code, extraFiles, onChange, onExtraFilesChange
     useEffect(() => {
         function handleMessage(event: MessageEvent) {
             const iframe = iframeRef.current
-            if (!iframe || event.source !== iframe.contentWindow || !isPlaygroundMessage(event.data)) return
-            const { type, message, line, col } = event.data
-            if (type === 'error') {
-                const where = line != null ? ` [riga ${line}${col != null ? `, col ${col}` : ''}]` : ''
-                appendLog('error', `✖ ${message}${where}`)
-            } else {
+            if (
+                !iframe
+                || event.source !== iframe.contentWindow
+                || !isPlaygroundMessage(event.data)
+            ) return
+
+            const execution = executionRef.current
+            if (!execution || event.data.runToken !== execution.token) return
+
+            const {
+                type,
+                message,
+                phase,
+                fileId,
+                fileName,
+                line,
+                col,
+            } = event.data
+
+            if (type !== 'error') {
                 appendLog('log', message)
+                return
             }
+
+            const where = line != null
+                ? ` [${fileName ?? 'file'}:${line}${col != null ? `:${col}` : ''}]`
+                : ''
+
+            appendLog('error', `✖ ${message}${where}`)
+
+            // console.error / console.warn non sono necessariamente eccezioni.
+            if (phase !== 'runtime' && phase !== 'syntax') return
+            if (line == null || fileId === undefined) return
+
+            // Una modifica in qualsiasi file può invalidare l'intera esecuzione.
+            const currentFiles = extraFilesRef.current
+            const sameMain = editorRef.current?.getValue() === execution.main
+            const sameExtras = currentFiles.length === execution.extras.length
+                && execution.extras.every((snapshot, index) => {
+                    const file = currentFiles[index]
+                    return file?.id === snapshot.id
+                        && (
+                            extraEditorsRef.current.get(file.id)?.getValue()
+                            ?? file.code
+                        ) === snapshot.code
+                })
+
+            if (!sameMain || !sameExtras) return
+
+            const editor = fileId === null
+                ? editorRef.current
+                : extraEditorsRef.current.get(fileId)
+
+            if (!editor) return
+
+            editor.setRuntimeErrors([{ line, col, message }])
+
+            // Apre il file interessato senza spostare il cursore mentre scrivi.
+            setActiveTabId(fileId)
         }
+
         window.addEventListener('message', handleMessage)
         return () => window.removeEventListener('message', handleMessage)
     }, [appendLog])

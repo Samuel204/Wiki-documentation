@@ -22,6 +22,11 @@ import {
 } from '@codemirror/language'
 import { ViewPlugin, Decoration, type DecorationSet, WidgetType, type ViewUpdate } from '@codemirror/view'
 import { collectIdentifiers, findGhostSuffix, PG_BASE_WORDS, PG_CONTEXT_WORDS } from '../../lib/playgroundHints'
+import {
+    playgroundDiagnostics,
+    setPlaygroundRuntimeErrors,
+    type PlaygroundEditorError,
+} from '../../lib/playgroundDiagnostics'
 
 export interface CodeEditorHandle {
     getValue: () => string
@@ -29,6 +34,8 @@ export interface CodeEditorHandle {
     setValue: (value: string) => void
     focus: () => void
     refresh: () => void
+    setRuntimeErrors: (errors: readonly PlaygroundEditorError[]) => void
+    clearRuntimeErrors: () => void
 }
 
 interface CodeEditorProps {
@@ -37,6 +44,7 @@ interface CodeEditorProps {
     onChange: (value: string, origin: string | undefined) => void
     onRun?: () => void
     ref?: Ref<CodeEditorHandle>
+
 }
 
 // ---------------------------------------------------------------------------
@@ -247,6 +255,7 @@ export function CodeEditor({ initialValue, onChange, onRun, ref }: CodeEditorPro
 
                 javascript({ jsx: true, typescript: false }),
                 syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+                playgroundDiagnostics(),
                 indentOnInput(),
                 bracketMatching(),
                 closeBrackets(),
@@ -301,14 +310,32 @@ export function CodeEditor({ initialValue, onChange, onRun, ref }: CodeEditorPro
                 const view = viewRef.current
                 if (!view) return
                 if (view.state.doc.toString() === value) return
+
                 programmaticRef.current = true
-                view.dispatch({
-                    changes: { from: 0, to: view.state.doc.length, insert: value },
-                })
-                programmaticRef.current = false
+                try {
+                    view.dispatch({
+                        changes: {
+                            from: 0,
+                            to: view.state.doc.length,
+                            insert: value,
+                        },
+                    })
+                } finally {
+                    programmaticRef.current = false
+                }
             },
             focus: () => viewRef.current?.focus(),
             refresh: () => viewRef.current?.requestMeasure(),
+            setRuntimeErrors: (errors) => {
+                const view = viewRef.current
+                if (!view) return
+                setPlaygroundRuntimeErrors(view, errors)
+            },
+            clearRuntimeErrors: () => {
+                const view = viewRef.current
+                if (!view) return
+                setPlaygroundRuntimeErrors(view, [])
+            },
         }),
         [],
     )
