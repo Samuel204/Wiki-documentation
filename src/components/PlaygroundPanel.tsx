@@ -203,6 +203,25 @@ export function PlaygroundPanel({ code, extraFiles, onChange, onExtraFilesChange
         setConsoleVisible(true)
     }, [])
 
+    const stop = useCallback(() => {
+        if (!executionRef.current) return
+
+        // Invalida subito i messaggi dell'esecuzione precedente.
+        executionRef.current = null
+
+        // Smonta l'iframe, eliminando anche i suoi timer.
+        setSrcDoc(null)
+        appendLog('log', '■ Esecuzione interrotta')
+    }, [appendLog])
+
+    const toggleExecution = useCallback(() => {
+        if (executionRef.current) {
+            stop()
+        } else {
+            run()
+        }
+    }, [run, stop])
+
     useEffect(() => {
         function handleMessage(event: MessageEvent) {
             const iframe = iframeRef.current
@@ -358,8 +377,32 @@ export function PlaygroundPanel({ code, extraFiles, onChange, onExtraFilesChange
     return (
         <section className={panelClassName} style={style}>
             <header className="playground-toolbar">
-                <button className="pg-btn accent" type="button" onClick={() => run()} title="Esegui (Ctrl+Invio)">
-                    <RunIcon /> Run
+                <button
+                    className="pg-btn accent"
+                    type="button"
+                    onClick={toggleExecution}
+                    title={srcDoc !== null
+                        ? 'Interrompi esecuzione (Ctrl+Invio)'
+                        : 'Esegui (Ctrl+Invio)'}
+                >
+                    {srcDoc !== null ? (
+                        <>
+                            <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 16 16"
+                                fill="currentColor"
+                                aria-hidden="true"
+                            >
+                                <rect x="4" y="4" width="8" height="8" rx="1" />
+                            </svg>
+                            Stop
+                        </>
+                    ) : (
+                        <>
+                            <RunIcon /> Run
+                        </>
+                    )}
                 </button>
                 <button className="pg-btn" type="button" onClick={resetCode}>
                     <ResetIcon /> Reset
@@ -421,7 +464,7 @@ export function PlaygroundPanel({ code, extraFiles, onChange, onExtraFilesChange
                             ref={editorRef}
                             initialValue={code}
                             onChange={handleEditorChange}
-                            onRun={() => run()}
+                            onRun={toggleExecution}
                         />
                     </div>
 
@@ -432,7 +475,7 @@ export function PlaygroundPanel({ code, extraFiles, onChange, onExtraFilesChange
                                 file={f}
                                 editorMapRef={extraEditorsRef}
                                 onChange={handleExtraChange}
-                                onRun={() => run()}
+                                onRun={toggleExecution}
                             />
                         </div>
                     ))}

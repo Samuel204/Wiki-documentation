@@ -929,6 +929,11 @@
 }
 
 .playground-panel .pg-btn.accent {
+  box-sizing: border-box;
+  width: 78px;
+  flex: 0 0 78px;
+  justify-content: center;
+  white-space: nowrap;
   color: #fff;
   background: #8f5cf0;
   border-color: #8f5cf0;
