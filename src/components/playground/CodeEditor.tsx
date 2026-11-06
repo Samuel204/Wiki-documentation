@@ -1,27 +1,52 @@
-
-// src/components/playground/CodeEditor.tsx
-import { useEffect, useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react'
+import {
+    useEffect,
+    useImperativeHandle,
+    useLayoutEffect,
+    useRef,
+    type Ref,
+} from 'react'
 import { EditorState } from '@codemirror/state'
-import { EditorView, keymap, lineNumbers } from '@codemirror/view'
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import {
+    Decoration,
+    EditorView,
+    ViewPlugin,
+    WidgetType,
+    keymap,
+    lineNumbers,
+    type DecorationSet,
+    type ViewUpdate,
+} from '@codemirror/view'
+import {
+    defaultKeymap,
+    history,
+    historyKeymap,
+    indentWithTab,
+} from '@codemirror/commands'
 import { javascript } from '@codemirror/lang-javascript'
 import { oneDark } from '@codemirror/theme-one-dark'
 import {
+    acceptCompletion,
     autocompletion,
-    completionKeymap,
     closeBrackets,
     closeBracketsKeymap,
+    completionKeymap,
+    completionStatus,
+    selectedCompletion,
     type CompletionContext,
     type CompletionResult,
 } from '@codemirror/autocomplete'
 import {
     bracketMatching,
+    defaultHighlightStyle,
     indentOnInput,
     syntaxHighlighting,
-    defaultHighlightStyle,
 } from '@codemirror/language'
-import { ViewPlugin, Decoration, type DecorationSet, WidgetType, type ViewUpdate } from '@codemirror/view'
-import { collectIdentifiers, findGhostSuffix, PG_BASE_WORDS, PG_CONTEXT_WORDS } from '../../lib/playgroundHints'
+import {
+    collectIdentifiers,
+    findGhostSuffix,
+    PG_BASE_WORDS,
+    PG_CONTEXT_WORDS,
+} from '../../lib/playgroundHints'
 import {
     playgroundDiagnostics,
     setPlaygroundRuntimeErrors,
@@ -39,138 +64,232 @@ export interface CodeEditorHandle {
 }
 
 interface CodeEditorProps {
-    /** Valore iniziale: dopo il mount usare `ref.setValue`. */
+    /** Valore iniziale: dopo il mount usare ref.setValue. */
     initialValue: string
     onChange: (value: string, origin: string | undefined) => void
     onRun?: () => void
     ref?: Ref<CodeEditorHandle>
-
 }
 
 // ---------------------------------------------------------------------------
-// Completion source per il Playground (integra playgroundHints con CM6)
+// Autocompletamento
 // ---------------------------------------------------------------------------
-function makePgCompletionSource(getDoc: () => string) {
-    return function pgComplete(ctx: CompletionContext): CompletionResult | null {
-        const wordBefore = ctx.matchBefore(/[A-Za-z_$][\w$]*/)
-        const line = ctx.state.doc.lineAt(ctx.pos)
-        const lineBefore = line.text.slice(0, ctx.pos - line.from)
 
-        // Completamento membro: `oggetto.parziale`
-        const dotMatch = lineBefore.match(/(?:^|[^\w$])([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)?$/)
-        if (dotMatch) {
-            const obj = dotMatch[1]
-            const partial = dotMatch[2] ?? ''
-            const members = PG_CONTEXT_WORDS.get(obj)
-            if (members) {
-                return {
-                    from: ctx.pos - partial.length,
-                    options: members
-                        .filter(m => m.startsWith(partial))
-                        .map(m => ({ label: m, type: 'property' as const })),
-                    validFor: /^[\w$]*$/,
-                }
+function pgCompletionSource(
+    context: CompletionContext,
+): CompletionResult | null {
+    const wordBefore = context.matchBefore(/[A-Za-z_$][\w$]*/)
+    const line = context.state.doc.lineAt(context.pos)
+    const lineBefore = line.text.slice(0, context.pos - line.from)
+
+    // Completamento membro: document., console.lo, React.use...
+    const dotMatch = lineBefore.match(
+        /(?:^|[^\w$])([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)?$/,
+    )
+
+    if (dotMatch) {
+        const objectName = dotMatch[1]
+        const partial = dotMatch[2] ?? ''
+        const members = PG_CONTEXT_WORDS.get(objectName)
+
+        if (members) {
+            return {
+                from: context.pos - partial.length,
+                options: members
+                    .filter((member) => member.startsWith(partial))
+                    .map((member) => ({
+                        label: member,
+                        type: 'property',
+                    })),
+                validFor: /^[\w$]*$/,
             }
         }
+    }
 
-        // Completamento parole base + identificatori documento
-        if (!wordBefore || wordBefore.text.length < 1) return null
-        const typed = wordBefore.text
+    if (!wordBefore || wordBefore.text.length < 1) {
+        return null
+    }
 
-        const docIdentifiers = collectIdentifiers(getDoc())
-        const baseSet = new Set(PG_BASE_WORDS)
-        const allWords = [...new Set([...PG_BASE_WORDS, ...docIdentifiers])]
+    const typed = wordBefore.text
+    const identifiers = collectIdentifiers(
+        context.state.doc.toString(),
+    )
+    const baseWords = new Set(PG_BASE_WORDS)
+    const allWords = [
+        ...new Set([...PG_BASE_WORDS, ...identifiers]),
+    ]
 
-        const options = allWords
-            .filter(w => w !== typed && w.startsWith(typed))
-            .map(w => ({
-                label: w,
-                type: (baseSet.has(w) ? 'keyword' : 'variable') as 'keyword' | 'variable',
-            }))
+    const options = allWords
+        .filter((word) => word !== typed && word.startsWith(typed))
+        .map((word) => ({
+            label: word,
+            type: baseWords.has(word) ? 'keyword' : 'variable',
+        }))
 
-        if (options.length === 0) return null
+    if (options.length === 0) {
+        return null
+    }
 
-        return {
-            from: wordBefore.from,
-            options,
-            validFor: /^[\w$]*$/,
-        }
+    return {
+        from: wordBefore.from,
+        options,
+        validFor: /^[\w$]*$/,
     }
 }
 
 // ---------------------------------------------------------------------------
-// Ghost text inline via widget decoration CM6
+// Ghost text
 // ---------------------------------------------------------------------------
+
 class GhostWidget extends WidgetType {
     readonly text: string
-    constructor(text: string) { super(); this.text = text }
-    eq(other: GhostWidget) { return this.text === other.text }
-    toDOM() {
+
+    constructor(text: string) {
+        super()
+        this.text = text
+    }
+
+    eq(other: GhostWidget): boolean {
+        return this.text === other.text
+    }
+
+    toDOM(): HTMLElement {
         const span = document.createElement('span')
         span.className = 'pg-ghost-text'
         span.textContent = this.text
+        span.setAttribute('aria-hidden', 'true')
         return span
     }
-    ignoreEvent() { return true }
+
+    ignoreEvent(): boolean {
+        return true
+    }
 }
 
-function makeGhostPlugin(getDoc: () => string) {
+/**
+ * Ricava il ghost dal completamento selezionato nel popup.
+ * Se il completamento usa una funzione personalizzata (es. uno snippet),
+ * non proviamo a rappresentarlo come semplice testo inline.
+ */
+function suffixFromPopup(
+    state: EditorState,
+    beforeCursor: string,
+): string | null {
+    const completion = selectedCompletion(state)
+
+    if (!completion || typeof completion.apply === 'function') {
+        return null
+    }
+
+    const typed =
+        beforeCursor.match(/[A-Za-z_$][\w$]*$/)?.[0] ?? ''
+
+    // Consente il ghost anche subito dopo il punto: document.|
+    if (!typed && !beforeCursor.endsWith('.')) {
+        return null
+    }
+
+    const insertedText =
+        typeof completion.apply === 'string'
+            ? completion.apply
+            : completion.label
+
+    if (!insertedText.startsWith(typed)) {
+        return null
+    }
+
+    return insertedText.slice(typed.length) || null
+}
+
+function makeGhostPlugin() {
     return ViewPlugin.fromClass(
         class {
             decorations: DecorationSet = Decoration.none
             suffix: string | null = null
 
-            update(update: ViewUpdate) {
-                const sel = update.state.selection.main
+            update(update: ViewUpdate): void {
+                const popupChanged =
+                    completionStatus(update.startState) !==
+                    completionStatus(update.state) ||
+                    selectedCompletion(update.startState) !==
+                    selectedCompletion(update.state)
 
-                // Rimuovi ghost se c'è selezione o cursori multipli
-                if (!sel.empty || update.state.selection.ranges.length > 1) {
-                    this.suffix = null
-                    this.decorations = Decoration.none
+                if (
+                    !update.docChanged &&
+                    !update.selectionSet &&
+                    !popupChanged
+                ) {
                     return
                 }
 
-                // Aggiorna solo se doc o cursore sono cambiati
-                if (!update.docChanged && !update.selectionSet) return
+                this.suffix = null
+                this.decorations = Decoration.none
 
-                const pos = sel.head
-                const line = update.state.doc.lineAt(pos)
-                const beforeCursor = line.text.slice(0, pos - line.from)
-                const afterCursor = line.text.slice(pos - line.from)
+                const { state } = update
+                const selection = state.selection.main
 
-                // Niente ghost a metà parola
+                if (
+                    !selection.empty ||
+                    state.selection.ranges.length > 1
+                ) {
+                    return
+                }
+
+                const position = selection.head
+                const line = state.doc.lineAt(position)
+                const offset = position - line.from
+                const beforeCursor = line.text.slice(0, offset)
+                const afterCursor = line.text.slice(offset)
+
+                // Non inserire suggerimenti in mezzo a una parola.
                 if (/^[\w$]/.test(afterCursor)) {
-                    this.suffix = null
-                    this.decorations = Decoration.none
                     return
                 }
 
-                const identifiers = collectIdentifiers(getDoc())
-                const newSuffix = findGhostSuffix(beforeCursor, identifiers)
+                const status = completionStatus(state)
+                let suffix: string | null = null
 
-                if (!newSuffix) {
-                    this.suffix = null
-                    this.decorations = Decoration.none
+                if (status === 'active') {
+                    // Nessun fallback locale: il ghost deve seguire il popup.
+                    suffix = suffixFromPopup(state, beforeCursor)
+                } else if (status === null) {
+                    suffix = findGhostSuffix(
+                        beforeCursor,
+                        collectIdentifiers(state.doc.toString()),
+                    )
+                }
+
+                // Durante il caricamento del popup nascondiamo il ghost,
+                // evitando di mostrare un suggerimento potenzialmente diverso.
+                if (!suffix) {
                     return
                 }
 
-                this.suffix = newSuffix
+                this.suffix = suffix
                 this.decorations = Decoration.set([
                     Decoration.widget({
-                        widget: new GhostWidget(newSuffix),
+                        widget: new GhostWidget(suffix),
                         side: 1,
-                    }).range(pos),
+                    }).range(position),
                 ])
             }
         },
-        { decorations: v => v.decorations },
+        {
+            decorations: (plugin) => plugin.decorations,
+        },
     )
 }
 
 // ---------------------------------------------------------------------------
 // Componente React
 // ---------------------------------------------------------------------------
-export function CodeEditor({ initialValue, onChange, onRun, ref }: CodeEditorProps) {
+
+export function CodeEditor({
+                               initialValue,
+                               onChange,
+                               onRun,
+                               ref,
+                           }: CodeEditorProps) {
     const hostRef = useRef<HTMLDivElement>(null)
     const viewRef = useRef<EditorView | null>(null)
     const initialValueRef = useRef(initialValue)
@@ -185,53 +304,80 @@ export function CodeEditor({ initialValue, onChange, onRun, ref }: CodeEditorPro
 
     useEffect(() => {
         const host = hostRef.current
-        if (!host) return
 
-        const getDoc = () => viewRef.current?.state.doc.toString() ?? ''
+        if (!host) {
+            return
+        }
 
-        const ghostPlugin = makeGhostPlugin(getDoc)
+        const ghostPlugin = makeGhostPlugin()
 
-        // Keybinding: Tab / ArrowRight accettano il ghost
         const acceptGhostKeymap = keymap.of([
             {
                 key: 'Tab',
                 run(view) {
-                    const plugin = view.plugin(ghostPlugin)
-                    if (!plugin?.suffix) return false
-                    const suffix = plugin.suffix
-                    view.dispatch(view.state.replaceSelection(suffix))
-                    return true
-                },
-            },
-            {
-                key: 'ArrowRight',
-                run(view) {
-                    const plugin = view.plugin(ghostPlugin)
-                    if (!plugin?.suffix) return false
-                    const suffix = plugin.suffix
-                    view.dispatch(view.state.replaceSelection(suffix))
+                    if (completionStatus(view.state) === 'active') {
+                        // Usa il comando ufficiale per rispettare il range
+                        // di sostituzione e le eventuali azioni personalizzate.
+                        acceptCompletion(view)
+
+                        // Non inserire il ghost né indentare se il popup
+                        // non è ancora pronto ad accettare il completamento.
+                        return true
+                    }
+
+                    const suffix = view.plugin(ghostPlugin)?.suffix
+
+                    if (!suffix) {
+                        // Lascia gestire Tab alla normale indentazione.
+                        return false
+                    }
+
+                    view.dispatch({
+                        ...view.state.replaceSelection(suffix),
+                        userEvent: 'input.complete',
+                        scrollIntoView: true,
+                    })
+
                     return true
                 },
             },
         ])
 
+        // Nessuna associazione personalizzata per ArrowRight:
+        // la freccia destra continua a spostare il cursore.
         const runKeymap = keymap.of([
             {
                 key: 'Ctrl-Enter',
-                run() { onRunRef.current?.(); return true },
+                run() {
+                    onRunRef.current?.()
+                    return true
+                },
             },
             {
                 key: 'Mod-Enter',
-                run() { onRunRef.current?.(); return true },
+                run() {
+                    onRunRef.current?.()
+                    return true
+                },
             },
         ])
 
-        const updateListener = EditorView.updateListener.of((update) => {
-            if (update.docChanged) {
-                const origin = programmaticRef.current ? 'setValue' : undefined
-                onChangeRef.current(update.state.doc.toString(), origin)
-            }
-        })
+        const updateListener = EditorView.updateListener.of(
+            (update) => {
+                if (!update.docChanged) {
+                    return
+                }
+
+                const origin = programmaticRef.current
+                    ? 'setValue'
+                    : undefined
+
+                onChangeRef.current(
+                    update.state.doc.toString(),
+                    origin,
+                )
+            },
+        )
 
         const state = EditorState.create({
             doc: initialValueRef.current,
@@ -239,48 +385,95 @@ export function CodeEditor({ initialValue, onChange, onRun, ref }: CodeEditorPro
                 oneDark,
                 lineNumbers(),
                 EditorView.theme({
-                    '&': { height: '100%', fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: '12.5px' },
-                    '.cm-scroller': { overflow: 'auto', lineHeight: '1.6' },
-                    '.cm-content': { padding: '8px 0' },
-                    '.cm-line': { padding: '0 8px' },
-                    '.cm-gutters': { borderRight: '1px solid #2a323c', background: '#0d1117', color: '#3c4450' },
-                    '.cm-activeLineGutter': { background: '#161b22' },
-                    '.cm-activeLine': { background: 'rgba(255,255,255,0.03)' },
-                    '.cm-selectionBackground': { background: '#264f78 !important' },
-                    '&.cm-focused .cm-selectionBackground': { background: '#264f78 !important' },
-                    '.cm-tooltip': { background: '#1c2431', border: '1px solid #2a323c', borderRadius: '6px' },
-                    '.cm-tooltip-autocomplete > ul': { fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: '12px' },
-                    '.cm-tooltip-autocomplete > ul > li[aria-selected]': { background: '#7c4fe0', color: '#fff' },
+                    '&': {
+                        height: '100%',
+                        fontFamily:
+                            "'JetBrains Mono', ui-monospace, monospace",
+                        fontSize: '12.5px',
+                    },
+                    '.cm-scroller': {
+                        overflow: 'auto',
+                        lineHeight: '1.6',
+                    },
+                    '.cm-content': {
+                        padding: '8px 0',
+                    },
+                    '.cm-line': {
+                        padding: '0 8px',
+                    },
+                    '.cm-gutters': {
+                        borderRight: '1px solid #2a323c',
+                        background: '#0d1117',
+                        color: '#3c4450',
+                    },
+                    '.cm-activeLineGutter': {
+                        background: '#161b22',
+                    },
+                    '.cm-activeLine': {
+                        background: 'rgba(255,255,255,0.03)',
+                    },
+                    '.cm-selectionBackground': {
+                        background: '#264f78 !important',
+                    },
+                    '&.cm-focused .cm-selectionBackground': {
+                        background: '#264f78 !important',
+                    },
+                    '.cm-tooltip': {
+                        background: '#1c2431',
+                        border: '1px solid #2a323c',
+                        borderRadius: '6px',
+                    },
+                    '.cm-tooltip-autocomplete > ul': {
+                        fontFamily:
+                            "'JetBrains Mono', ui-monospace, monospace",
+                        fontSize: '12px',
+                    },
+                    '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+                        background: '#7c4fe0',
+                        color: '#fff',
+                    },
+                    '.pg-ghost-text': {
+                        color: '#7d8590',
+                        opacity: '0.65',
+                        pointerEvents: 'none',
+                    },
                 }),
 
-                javascript({ jsx: true, typescript: false }),
-                syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+                javascript({
+                    jsx: true,
+                    typescript: false,
+                }),
+                syntaxHighlighting(defaultHighlightStyle, {
+                    fallback: true,
+                }),
                 playgroundDiagnostics(),
                 indentOnInput(),
                 bracketMatching(),
                 closeBrackets(),
 
                 history(),
-                keymap.of([...historyKeymap]),
+                keymap.of(historyKeymap),
 
-                // Autocompletamento: rimuoviamo Tab dai completionKeymap per non
-                // interferire con il ghost text
                 autocompletion({
-                    override: [makePgCompletionSource(getDoc)],
+                    override: [pgCompletionSource],
                     activateOnTyping: true,
                     maxRenderedOptions: 12,
                     defaultKeymap: false,
                 }),
-                keymap.of(completionKeymap.filter(b => b.key !== 'Tab')),
 
-                // Ghost text inline
+                // Tab viene gestito dalla nostra keymap.
+                // Le frecce su/giù ed Enter mantengono il comportamento
+                // standard del popup.
+                keymap.of(
+                    completionKeymap.filter(
+                        (binding) => binding.key !== 'Tab',
+                    ),
+                ),
+
                 ghostPlugin,
                 acceptGhostKeymap,
 
-                // Backspace tra una coppia vuota (es. "(|)") cancella entrambe le parentesi
                 keymap.of(closeBracketsKeymap),
-
-                // Keybinding standard
                 keymap.of(defaultKeymap),
                 keymap.of([indentWithTab]),
                 runKeymap,
@@ -289,10 +482,17 @@ export function CodeEditor({ initialValue, onChange, onRun, ref }: CodeEditorPro
             ],
         })
 
-        const view = new EditorView({ state, parent: host })
+        const view = new EditorView({
+            state,
+            parent: host,
+        })
+
         viewRef.current = view
 
-        const resizeObserver = new ResizeObserver(() => view.requestMeasure())
+        const resizeObserver = new ResizeObserver(() => {
+            view.requestMeasure()
+        })
+
         resizeObserver.observe(host)
 
         return () => {
@@ -305,13 +505,18 @@ export function CodeEditor({ initialValue, onChange, onRun, ref }: CodeEditorPro
     useImperativeHandle(
         ref,
         () => ({
-            getValue: () => viewRef.current?.state.doc.toString() ?? '',
+            getValue: () =>
+                viewRef.current?.state.doc.toString() ?? '',
+
             setValue: (value) => {
                 const view = viewRef.current
-                if (!view) return
-                if (view.state.doc.toString() === value) return
+
+                if (!view || view.state.doc.toString() === value) {
+                    return
+                }
 
                 programmaticRef.current = true
+
                 try {
                     view.dispatch({
                         changes: {
@@ -324,17 +529,29 @@ export function CodeEditor({ initialValue, onChange, onRun, ref }: CodeEditorPro
                     programmaticRef.current = false
                 }
             },
-            focus: () => viewRef.current?.focus(),
-            refresh: () => viewRef.current?.requestMeasure(),
+
+            focus: () => {
+                viewRef.current?.focus()
+            },
+
+            refresh: () => {
+                viewRef.current?.requestMeasure()
+            },
+
             setRuntimeErrors: (errors) => {
                 const view = viewRef.current
-                if (!view) return
-                setPlaygroundRuntimeErrors(view, errors)
+
+                if (view) {
+                    setPlaygroundRuntimeErrors(view, errors)
+                }
             },
+
             clearRuntimeErrors: () => {
                 const view = viewRef.current
-                if (!view) return
-                setPlaygroundRuntimeErrors(view, [])
+
+                if (view) {
+                    setPlaygroundRuntimeErrors(view, [])
+                }
             },
         }),
         [],
